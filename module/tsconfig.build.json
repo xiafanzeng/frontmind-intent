@@ -13,7 +13,8 @@
   "include": [
     "server/**/*.ts",
     "contracts/**/*.ts",
-    "schema/**/*.ts"
+    "schema/**/*.ts",
+    "client/**/*.ts"
   ],
   "exclude": [
     "client/**/*.test.ts"
