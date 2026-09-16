@@ -8,13 +8,20 @@
     "moduleResolution": "NodeNext",
     "declaration": true,
     "declarationMap": false,
-    "sourceMap": true
+    "sourceMap": true,
+    "jsx": "react-jsx",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ]
   },
   "include": [
     "server/**/*.ts",
     "contracts/**/*.ts",
     "schema/**/*.ts",
-    "client/**/*.ts"
+    "client/**/*.ts",
+    "client/**/*.tsx"
   ],
   "exclude": [
     "client/**/*.test.ts"

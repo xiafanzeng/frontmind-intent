@@ -3,6 +3,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import type { IntentSchema } from "../schema/index.js";
 import type { IntentDatabase, IntentTransaction } from "./response-logic-service.js";
 import type { ServicePortalQuestion, WorkspaceQuestionCategory } from "../contracts/questions.js";
+import type { ReplaceGeneratedQuestionCandidatesInput } from "./generated-questions.js";
 export interface IntentQuestionPorts {
   tables: IntentSchema;
   getDb(): Promise<IntentDatabase | null>;
@@ -99,5 +100,27 @@ async function confirmEnterpriseQuestionIntent(input: { userId: number; question
 }
 
 
-return { workspaceQuestionTable, workspaceQuestionOwnerPredicate, projectQuestionDto, listEnterpriseQuestions, selectEnterpriseQuestion, confirmEnterpriseQuestionIntent };
+/** Candidate adoption for an injected enterprise scope, without a commercial tenant/plan lookup. */
+async function replaceGeneratedProjectCandidates(input:ReplaceGeneratedQuestionCandidatesInput) {
+ const {db,enterpriseProjectId}=await context(input.userId);
+ if(!input.candidates.length || input.candidates.length>800)throw new AuthServiceError("CONFLICT","候选问题数量无效");
+ const keys=input.candidates.map(candidate=>candidate.candidateKey);
+ if(keys.some(key=>!key)||new Set(keys).size!==keys.length)throw new AuthServiceError("CONFLICT","候选问题标识重复或无效");
+ return db.transaction(async tx=>{
+  await lockCustomerProjectBusinessWrite(tx,input.userId);await ports.lockOwner(tx,input.userId);
+  const prior=await tx.select().from(questions).where(and(workspaceQuestionOwnerPredicate(input.userId),eq(questions.sourceTaskId,input.sourceTaskId))).orderBy(asc(questions.ordinal)).for("update");
+  const requestHash=createHash("sha256").update(JSON.stringify(input.candidates)).digest("hex");
+  if(prior.length){if(prior.length!==input.candidates.length||prior.some(row=>row.requestHash!==requestHash))throw new AuthServiceError("CONFLICT","任务已绑定另一组候选问题");return prior.map(projectQuestionDto);}
+  const now=new Date();
+  await tx.update(questions).set({status:"archived",archivedAt:now,updatedAt:now}).where(and(workspaceQuestionOwnerPredicate(input.userId),eq(questions.source,"model"),eq(questions.status,"candidate"),eq(questions.locked,false),eq(questions.selectionApprovalStatus,"not_requested")));
+  const rows=input.candidates.map((candidate,ordinal)=>{
+   const clientRequestId=`generation:${createHash("sha256").update(`${input.sourceTaskId}\0${candidate.candidateKey}`).digest("hex")}`;
+   return {id:enterpriseProjectOperationId(input.userId,`${enterpriseProjectId}:${clientRequestId}`),enterpriseProjectId,userId:input.userId,clientRequestId,requestHash,candidateKey:candidate.candidateKey!,category:candidate.category,question:candidate.question,intent:candidate.intent??null,rationale:candidate.rationale??null,evidence:candidate.evidence??[],risks:candidate.risks??[],source:"model" as const,status:"candidate" as const,sourceTaskId:input.sourceTaskId,ordinal,createdAt:now,updatedAt:now};
+  });
+  await tx.insert(questions).values(rows);
+  return (await tx.select().from(questions).where(and(workspaceQuestionOwnerPredicate(input.userId),eq(questions.sourceTaskId,input.sourceTaskId))).orderBy(asc(questions.ordinal))).map(projectQuestionDto);
+ });
+}
+
+return { replaceGeneratedProjectCandidates, workspaceQuestionTable, workspaceQuestionOwnerPredicate, projectQuestionDto, listEnterpriseQuestions, selectEnterpriseQuestion, confirmEnterpriseQuestionIntent };
 }

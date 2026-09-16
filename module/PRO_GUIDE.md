@@ -1,12 +1,9 @@
-# Pro handoff guide: Intent
+# Pro 开发说明
 
-Use the exact public projection commit supplied by `frontmind-module-delivery`. Return a ZIP with `handoff.json`, `HANDOFF.md`, and complete changed files under `files/module/` or `files/standalone/`. Put explicit deletions in `handoff.json`; absent files are not deletions. Do not include `.git`, credentials, environment files, caches, customer data, private Core code, or deployment targets.
+修改具体线上 SHA 对应的源码。`module/` 包含完整业务 UI、API、持久化、结果状态机与工作流；`standalone/` 是独立启动和本地预览适配，`vendor/` 是主仓维护的公开 Core 契约。
 
-## Current boundary
+请保留主体业务语义：问题 revision 校验；应答任务与问题/会话/轮次绑定；未知创建结果先恢复，不重复付费；旧任务工作流冻结；明确采用模型结果后才变更正式应答。
 
-- Projection path: `modules/intent` in the private main repository.
-- Production/application baseline: `332d5ef072104283601682a3aca165a127c14e2c`.
-- Public repository and subdomain are not created by this source projection.
-- Cross-module imports, authentication, provider credentials, persistence adapters, and deployment remain host-owned unless a file is explicitly present in this projection.
+允许修改业务页面和模块自己的依赖（`module/package.json`）；不要把真实门禁、供应商密钥、客户数据放入 ZIP。共享 Core 接口变更需在 HANDOFF.md 明确列出，不能绕过现有接口失败。
 
-Describe dependencies and actual checks in `HANDOFF.md`. A ZIP is reviewed and merged in an isolated worktree; it does not automatically publish production or create external infrastructure.
+默认返回 `handoff.json`、`HANDOFF.md`、`files/`。记录准确 baseCommit、修改目标、依赖变更和已实际执行的检查。缺失文件不是删除；删除必须写入 manifest 的 `delete`。本地预览与开发域名真实验收分开记录。
