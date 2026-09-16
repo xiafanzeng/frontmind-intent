@@ -34,10 +34,10 @@ export type StartResponseLogicTask = (messages: IntentMessage[], input: StartRes
 export interface UploadedIntentAsset { fileId: string; filename: string; sizeBytes?: number; expiresAt: number; }
 export type UploadIntentAsset = (file: File, onProgress?: (percent: number) => void, options?: { filename?: string; mimeType?: string; signal?: AbortSignal }) => Promise<UploadedIntentAsset>;
 
-export interface IntentButtonProps { children?: ReactNode; className?: string; disabled?: boolean; type?: "button" | "submit" | "reset"; variant?: string; onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void; }
+export interface IntentButtonProps { children?: ReactNode; className?: string; disabled?: boolean; type?: "button" | "submit" | "reset"; variant?: "default" | "operator" | "operatorOutline" | "destructive" | "outline" | "secondary" | "ghost" | "link"; onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void; }
 export interface IntentFilePreviewProps { file: { id: string; type: "image" | "file"; name: string; fileId: string }; className?: string; showDownload?: boolean; }
 export interface IntentImagePreviewProps { src?: string; fileId?: string; alt?: string; className?: string; showDownload?: boolean; expiresAt?: number; expired?: boolean; }
-export interface IntentExecutionProps { execution?: GeneralExecutionDto; }
+export interface IntentExecutionProps { execution: GeneralExecutionDto; }
 
 export interface IntentVisualComponents {
   BusinessExecutionActivity: ComponentType<IntentExecutionProps>;
@@ -46,12 +46,12 @@ export interface IntentVisualComponents {
   Button: ComponentType<IntentButtonProps>;
 }
 export interface IntentToast { success(message: string): void; error(message: string): void; }
-export interface IntentCategoryAdapter { categoryKey(value: string): string | undefined; categoryTone(value: string): "plum" | "teal" | "amber" | "blue" | undefined; }
+export interface IntentCategoryAdapter { categoryKey(value: string): string | null | undefined; categoryTone(value: string): "plum" | "teal" | "amber" | "blue" | null | undefined; }
 
-export interface ResponseLogicQueryResult { isLoading: boolean; isFetching: boolean; isSuccess: boolean; isError: boolean; data?: { records: ResponseLogicRecordDto[] }; error?: { message?: string }; refetch(): Promise<{ data?: { records: ResponseLogicRecordDto[] }; error?: unknown }>; }
+export interface ResponseLogicQueryResult { isLoading: boolean; isFetching: boolean; isSuccess: boolean; isError: boolean; data?: { records: ResponseLogicRecordDto[] }; error?: { message?: string } | null; refetch(): Promise<{ data?: { records: ResponseLogicRecordDto[] }; error?: unknown }>; }
 export interface ResponseLogicMutation { mutateAsync(input: SaveResponseLogicInput): Promise<{ record: ResponseLogicRecordDto }>; }
 export interface ResponseLogicCache { setData(input: undefined, updater: (current: { records: ResponseLogicRecordDto[] } | undefined) => { records: ResponseLogicRecordDto[] } | undefined): void; }
-export interface IntentTrpcHost { useUtils(): { workspace: { responseLogic: ResponseLogicCache } }; workspace: { responseLogic: { useQuery(input: undefined, options: { retry: boolean; refetchOnMount: string; refetchOnWindowFocus: boolean; refetchInterval: number; refetchIntervalInBackground: boolean }): ResponseLogicQueryResult }; saveResponseLogic: { useMutation(options: { onSuccess: (value: { record: ResponseLogicRecordDto }) => void }): ResponseLogicMutation } } }
+export interface IntentTrpcHost { useUtils(): { workspace: { responseLogic: ResponseLogicCache } }; workspace: { responseLogic: { useQuery(input: undefined, options: { retry: boolean; refetchOnMount: "always" | boolean; refetchOnWindowFocus: boolean; refetchInterval: number; refetchIntervalInBackground: boolean }): ResponseLogicQueryResult }; saveResponseLogic: { useMutation(options: { onSuccess: (value: { record: ResponseLogicRecordDto }) => void }): ResponseLogicMutation } } }
 
 /** All browser/application dependencies needed by the visual shell are injected by the main workbench. */
 export interface IntentWorkspaceHost extends IntentVisualComponents, IntentCategoryAdapter {
@@ -62,6 +62,7 @@ export interface IntentWorkspaceHost extends IntentVisualComponents, IntentCateg
   createResponseLogicTask: StartResponseLogicTask;
   uploadChatLocalAsset: UploadIntentAsset;
   toast: IntentToast;
+  loadPreviewAdapter?(): Promise<import("./ResponseLogicWorkspace.js").ResponseLogicPreviewAdapter>;
 }
 
 // Keep these aliases available to a host adapter without importing private Dashboard contracts.

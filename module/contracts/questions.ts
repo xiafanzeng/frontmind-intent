@@ -53,3 +53,6 @@ export const selectedServicePortalQuestionSchema =
 export type SelectedServicePortalQuestion = z.infer<
   typeof selectedServicePortalQuestionSchema
 >;
+
+/** Browser question data excludes commercial contract coordinates. */
+export type PublicServicePortalQuestion = Omit<ServicePortalQuestion, "contractId" | "quotaPeriodId">;
