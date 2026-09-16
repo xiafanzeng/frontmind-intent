@@ -18,7 +18,8 @@
     "lucide-react": "^0.453.0",
     "@radix-ui/react-dialog": "^1.1.15",
     "jszip": "^3.10.1",
-    "exceljs": "^4.4.0"
+    "exceljs": "^4.4.0",
+    "@frontmind/module-ui": "workspace:*"
   },
   "devDependencies": {
     "typescript": "5.9.3",
