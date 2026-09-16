@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Button } from "@frontmind/module-ui/components/ui/button";
 import type { IntentWorkspaceHost, IntentRestOperation } from "../module/client/host";
 import type { QuestionsHost } from "../module/client/questions-host";
 import type { ServicePortalQuestion } from "../module/contracts/questions";
@@ -56,7 +57,7 @@ export function createStandaloneIntentAdapter(preview: boolean, workspaceId: str
   },
   toast:{success:notice,error:notice},
   loadPreviewAdapter: () => import("./ResponseLogicPreview").then(value => value.responseLogicPreviewAdapter),
-  Button:({variant,...props})=><button {...props} data-variant={variant}/>,
+  Button,
   FilePreview:({file,className})=><a className={className} href={`/api/frontmind/v2/assets/${encodeURIComponent(file.fileId)}/content`} target="_blank" rel="noreferrer">{file.name}</a>,
   ImagePreview:({src,fileId,alt,className})=><img className={className} alt={alt} src={src??`/api/frontmind/v2/assets/${encodeURIComponent((fileId??""))}/content`}/>,
   BusinessExecutionActivity:({execution})=><details className="intent-execution"><summary>执行进度</summary><pre>{JSON.stringify(execution?.timeline??[],null,2)}</pre></details>,
