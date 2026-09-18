@@ -1,5 +1,8 @@
+import FilePreview from "@frontmind/module-ui/components/FilePreview";
+import ImagePreview from "@frontmind/module-ui/components/ImagePreview";
 import { useEffect, useState } from "react";
 import { Button } from "@frontmind/module-ui/components/ui/button";
+import { BusinessExecutionActivity } from "@frontmind/module-ui/components/BusinessExecutionActivity";
 import type { IntentWorkspaceHost, IntentRestOperation } from "../module/client/host";
 import type { QuestionsHost } from "../module/client/questions-host";
 import type { ServicePortalQuestion } from "../module/contracts/questions";
@@ -58,9 +61,9 @@ export function createStandaloneIntentAdapter(preview: boolean, workspaceId: str
   toast:{success:notice,error:notice},
   loadPreviewAdapter: () => import("./ResponseLogicPreview").then(value => value.responseLogicPreviewAdapter),
   Button,
-  FilePreview:({file,className})=><a className={className} href={`/api/frontmind/v2/assets/${encodeURIComponent(file.fileId)}/content`} target="_blank" rel="noreferrer">{file.name}</a>,
-  ImagePreview:({src,fileId,alt,className})=><img className={className} alt={alt} src={src??`/api/frontmind/v2/assets/${encodeURIComponent((fileId??""))}/content`}/>,
-  BusinessExecutionActivity:({execution})=><details className="intent-execution"><summary>执行进度</summary><pre>{JSON.stringify(execution?.timeline??[],null,2)}</pre></details>,
+  FilePreview,
+  ImagePreview,
+  BusinessExecutionActivity,
  };
  const questionsHost: QuestionsHost={useBusinessWorkspace:()=>({task:{scopeKey:workspaceId}}),useBusinessWorkspaceSummary:()=>{},trpc:{useUtils:()=>({workspace:{questionPortfolio:questions,portal:questions,responseLogic:records}}),workspace:{questionPortfolio:{useQuery:()=>questions.useQuery()},dashboard:{useQuery:()=>dashboard.useQuery()},requestQuestionSelection:{useMutation:()=>({async mutateAsync(input){if(input.mode!=="direct")throw new Error("该入口由主工作台提供");if(preview){const question={...exampleQuestion,id:crypto.randomUUID(),question:input.question,category:input.category};previewQuestions=[...previewQuestions,question];return {question};}return request("/api/intent/questions",{question:input.question,category:input.category,clientRequestId:crypto.randomUUID()});}})},questionMaintenance:{execute:{useMutation:()=>({async mutateAsync(input){if(preview){const original=previewQuestions.find(q=>q.id===input.questionId);if(!original||original.revision!==input.expectedRevision)throw new Error("问题版本已变化，请刷新");previewQuestions=previewQuestions.filter(q=>q.id!==input.questionId);if(input.action==="modify")previewQuestions.push({...original,question:input.proposedQuestion!,revision:original.revision+1});return {questionId:input.questionId};}return request("/api/intent/questions/maintenance",input);}})}}}}};
  return {responseHost,questionsHost,questions};
