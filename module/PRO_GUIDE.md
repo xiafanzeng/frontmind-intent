@@ -1,9 +1,23 @@
-# Pro 开发说明
+# Pro 开发说明：意图优化
 
-修改具体线上 SHA 对应的源码。`module/` 包含完整业务 UI、API、持久化、结果状态机与工作流；`standalone/` 是独立启动和本地预览适配，`vendor/` 是主仓维护的公开 Core 契约。
+基于 delivery skill 导出的准确线上 SHA 修改 https://github.com/xiafanzeng/frontmind-intent 。使用同版本源码 ZIP；不要猜测当前线上版本。
 
-请保留主体业务语义：问题 revision 校验；应答任务与问题/会话/轮次绑定；未知创建结果先恢复，不重复付费；旧任务工作流冻结；明确采用模型结果后才变更正式应答。
+- 修改 `module/client/`、`module/server/`、`module/schema/`、`module/worker/`、`module/workflows/` 内本轮相关文件。
+- 具体 API/业务实现入口见 `module/API_DEVELOPMENT.md`。新接口可注册在 `module/server/http-api.ts`，实际地址 `/api/modules/intent/<路径>`，真实部署会装载此文件。
+- `standalone/` 修改仅影响子域名独立壳。共用样式/组件在 `vendor/`，通过主仓维护；不要改变未涉及的样式和流程。
+- 保留身份归属、幂等、事务、费用预留、确认和恢复语义。客户端提供的 owner/租户参数不能代替服务器上下文。
+- 新增依赖须写入 `module/package.json` 并更新子仓根锁文件；不要忽略编译失败或用预览数据替代真实 API。
+- 不包含 `.git`、环境文件、真实 Key、客户数据、构建缓存、部署目标或私有主仓源码。
 
-允许修改业务页面和模块自己的依赖（`module/package.json`）；不要把真实门禁、供应商密钥、客户数据放入 ZIP。共享 Core 接口变更需在 HANDOFF.md 明确列出，不能绕过现有接口失败。
+返回 `pro-update.zip`：
 
-默认返回 `handoff.json`、`HANDOFF.md`、`files/`。记录准确 baseCommit、修改目标、依赖变更和已实际执行的检查。缺失文件不是删除；删除必须写入 manifest 的 `delete`。本地预览与开发域名真实验收分开记录。
+```text
+handoff.json
+HANDOFF.md
+files/module/...
+files/standalone/...
+```
+
+`handoff.json` 保留 formatVersion=1、module=intent、准确 baseCommit、mode=changes；删除路径写入 delete，缺失文件不代表删除。HANDOFF.md 写清本轮需求、文件、依赖、实际验证和未验证内容。
+
+用户要求发布子域名时，delivery 校验三方合并、检查/构建、推送 GitHub、部署并核对 moduleSha/coreSha。GitHub 提交成功不等于网站已更新。sync 合回源码不等于自动发布生产 Dashboard。

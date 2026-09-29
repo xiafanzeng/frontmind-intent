@@ -1,12 +1,26 @@
-# FrontMind 意图优化模块
+# FrontMind 意图优化
 
-公开仓库：<https://github.com/xiafanzeng/frontmind-intent>
-开发域名：<https://intent.frontmind.cn>
+公开仓库：https://github.com/xiafanzeng/frontmind-intent
+开发域名：https://intent.frontmind.cn/
 
-`module/` 与主仓 `modules/intent/` 同步；子仓的 `standalone/` 提供独立入口。问题维护、问题生成、应答逻辑生成/编辑/采用/版本校验的真实组件、API、服务、持久化和工作流均在此目录。主仓原路径仅装配公开接口。
+`module/` 对应主仓 `modules/intent/`；公开仓 `standalone/` 是独立启动壳，不合回 Dashboard。
 
-独立模式可输入企业资料和问题，无需先创建品牌知识库或商业套餐。原主仓的知识关联与额度检查通过宿主端口保留。供应商凭据由私有 Core 以不可透明读取的引用注入，公开模块没有密钥。
+## 业务代码
 
-公开仓本地执行：`pnpm install --frozen-lockfile`、`pnpm dev`；类型、测试与生产构建：`pnpm typecheck`、`pnpm test`、`pnpm build`。预览使用合成数据并清楚标注，不调用供应商。真实生成须在开发子域名验收。
+问题维护、问题生成、应答逻辑、编辑、采用及版本校验。页面在 `client/`，业务服务在 `server/`，表定义在 `schema/`，后台处理在 `worker/`，有效工作流在 `workflows/`（各目录按实际业务存在）。
 
-有效流程位于 `workflows/`，历史运行数据和凭据不属于交付。修改包遵循 `PRO_GUIDE.md` 的准确基线和显式删除规则；不要直接覆盖主仓或修改部署目标。
+重点入口：`server/brand-question-portfolio-api.ts`（问题生成）、`server/response-logic-api.ts`（应答任务）、`server/response-logic-service.ts`（保存/采用/版本）、`server/router.ts`（问题维护 API）。
+
+新增后端 API 从 **`server/http-api.ts`** 开始，挂在 `/api/modules/intent/`。此注册函数由真实开发环境和主仓共同装载；在本模块命名空间新增路径不需要修改主仓的逐接口允许清单。现有 API 地址保留。
+
+## 开发方式
+
+公开仓根目录执行 `pnpm install --frozen-lockfile`、`pnpm dev`；检查使用 `pnpm typecheck`、`pnpm test`、`pnpm build`。本地预览使用合成数据；真实保存、任务、上传下载和供应商调用在开发子域名检查。
+
+先用 delivery skill 导出准确线上 SHA，交给 Pro 修改并返回 ZIP，再用 delivery skill 提交/部署子域名，验收后用 sync skill 合回主仓。见 [API 开发说明](API_DEVELOPMENT.md) 和 [Pro 交接规则](PRO_GUIDE.md)。
+
+## 运行基础设施
+
+主仓装配真实登录/租户或开发固定工作区、数据库连接、统一资金、文件存储和通用 AI 执行器。业务请求参数、状态机及结果解释由本模块维护。已有测试凭据在服务器配置，组员修改服务端调用代码后沿用它们，无需在本地拿 Key；新增供应商/新凭据仍需管理员配置服务器。服务端可读取注入环境，任何密钥都不得返回浏览器或写入公开 Git/ZIP。
+
+开发入口可用、配置存在或本地测试通过，均不等于所有付费业务链路已验收；HANDOFF 必须记录实际检查范围。
