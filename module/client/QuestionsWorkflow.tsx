@@ -371,7 +371,7 @@ export function QuestionsWorkflow({
   return (
     <div className="questions-resource">
       <div className="questions-resource__toolbar">
-        <h2>优化问题</h2>
+        <h2>优化问题 <span className="questions-resource__release-validation">发布验证</span></h2>
         <input
           type="search"
           aria-label="搜索已有问题"
