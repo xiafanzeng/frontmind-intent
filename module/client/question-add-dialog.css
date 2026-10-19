@@ -103,6 +103,22 @@
   line-height: 34px;
   font-weight: 600;
 }
+
+.questions-resource__release-validation {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: 1px solid #e5dcf4;
+  border-radius: 999px;
+  background: #f4effb;
+  color: #76569b;
+  font-size: 12px;
+  line-height: 20px;
+  font-weight: 500;
+  vertical-align: middle;
+  white-space: nowrap;
+}
 .questions-resource__toolbar :is(input, select) {
   min-height: 40px;
   border: 1px solid #d0d5dd;
