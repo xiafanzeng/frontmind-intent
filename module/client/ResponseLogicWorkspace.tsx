@@ -976,11 +976,33 @@ function PreviewResponseLogicEditor({
       ? previewAdapter.createDraft(entry.question, entry.group)
       : createEmptyDraft({ id: "", question: "", intent: "", summary: "" }),
   );
+  const [demoView, setDemoView] = useState<"detail"|"evaluation"|"optimize">("detail");
+  const [demoEvaluation, setDemoEvaluation] = useState<ReturnType<typeof createDemoEvaluation>|null>(null);
   if (!entry) return <ResponseLogicMissingQuestionState />;
+  const previewLogic: LogicSections = {concern:draft.concern,conclusion:draft.conclusion,facts:draft.facts,boundaries:draft.boundaries};
+  const previewFingerprint = fingerprintLogic(previewLogic);
+  const validDemoEvaluation = demoEvaluation?.questionId===questionId && demoEvaluation.sourceFingerprint===previewFingerprint ? demoEvaluation : null;
+  const showDemo = Boolean(draft.concern.trim() || draft.conclusion.trim() || draft.facts.trim() || draft.boundaries.trim());
+  const beginDemoEvaluation = () => {setDemoEvaluation(createDemoEvaluation({questionId:entry.question.id,question:entry.question.question,intent:entry.question.intent ?? "",version:null,revision:0,logic:previewLogic}));setDemoView("evaluation")};
   return (
     <section className="rl-single-page">
       <ResponseLogicPageHeader group={entry.group} question={entry.question} />
-      <LogicEditorCard
+      {showDemo && demoView === "detail" && (
+        <div className="rl-eval-entry" style={{display:"flex",gap:10,flexWrap:"wrap",margin:"18px 0"}}>
+          <button type="button" className="rl-primary-button" onClick={beginDemoEvaluation}>查看四维评估</button>
+          <button type="button" className="rl-text-button" onClick={() => {if (!validDemoEvaluation) {setDemoEvaluation(createDemoEvaluation({questionId:entry.question.id,question:entry.question.question,intent:entry.question.intent ?? "",version:null,revision:0,logic:previewLogic}));}setDemoView("optimize")}}>生成优化应答逻辑</button>
+        </div>
+      )}
+      {showDemo && demoView === "evaluation" && validDemoEvaluation && (
+        <ResponseLogicEvaluationPanel evaluation={validDemoEvaluation} onBack={()=>setDemoView("detail")} onOptimize={()=>setDemoView("optimize")}/>
+      )}
+      {showDemo && demoView === "optimize" && validDemoEvaluation && (
+        <ResponseLogicOptimizationWorkflow key={`${questionId}:preview:${previewFingerprint}`} evaluation={validDemoEvaluation} logic={previewLogic} onBack={()=>setDemoView("evaluation")}/>
+      )}
+      {demoView !== "detail" && !validDemoEvaluation && (
+        <div className="rl-eval-entry" role="status">当前应答逻辑或问题已变化，评估结果已失效。<button type="button" className="rl-text-button" onClick={beginDemoEvaluation}>重新查看评估</button><button type="button" className="rl-text-button" onClick={()=>setDemoView("detail")}>返回应答逻辑编辑</button></div>
+      )}
+      {demoView === "detail" && <LogicEditorCard
         draft={draft}
         frozen={false}
         publishing={false}
@@ -992,7 +1014,7 @@ function PreviewResponseLogicEditor({
         uploadingMaterials={false}
         onAddMaterials={() => undefined}
         onRemoveMaterial={() => undefined}
-      />
+      />}
     </section>
   );
 }
@@ -1887,8 +1909,8 @@ function ResponseLogicQuestionEditor({
 
       {showDemo && demoView === "detail" && (
         <div className="rl-eval-entry" style={{display:"flex",gap:10,flexWrap:"wrap",margin:"18px 0"}}>
-          <button type="button" className="rl-primary-button" onClick={beginDemoEvaluation}>查看四维评估（演示）</button>
-          <button type="button" className="rl-text-button" onClick={() => {if (!validDemoEvaluation) {setDemoEvaluation(createDemoEvaluation({questionId,question:question.question,intent:question.intent,version:currentVersion,revision:currentRevision,logic:currentLogic}));}setDemoView("optimize")}}>生成优化应答逻辑（演示）</button>
+          <button type="button" className="rl-primary-button" onClick={beginDemoEvaluation}>查看四维评估</button>
+          <button type="button" className="rl-text-button" onClick={() => {if (!validDemoEvaluation) {setDemoEvaluation(createDemoEvaluation({questionId,question:question.question,intent:question.intent,version:currentVersion,revision:currentRevision,logic:currentLogic}));}setDemoView("optimize")}}>生成优化应答逻辑</button>
         </div>
       )}
       {showDemo && demoView === "evaluation" && validDemoEvaluation && (
@@ -1898,7 +1920,7 @@ function ResponseLogicQuestionEditor({
         <ResponseLogicOptimizationWorkflow key={`${questionId}:${currentVersion}:${currentRevision}:${currentFingerprint}`} evaluation={validDemoEvaluation} logic={currentLogic} onBack={()=>setDemoView("evaluation")}/>
       )}
       {demoView !== "detail" && !validDemoEvaluation && (
-        <div className="rl-eval-entry" role="status">当前应答逻辑或版本已变化，演示评分已失效。<button type="button" className="rl-text-button" onClick={beginDemoEvaluation}>重新查看演示评估</button><button type="button" className="rl-text-button" onClick={()=>setDemoView("detail")}>返回应答逻辑编辑</button></div>
+        <div className="rl-eval-entry" role="status">当前应答逻辑或版本已变化，评估结果已失效。<button type="button" className="rl-text-button" onClick={beginDemoEvaluation}>重新查看评估</button><button type="button" className="rl-text-button" onClick={()=>setDemoView("detail")}>返回应答逻辑编辑</button></div>
       )}
 
       {demoView === "detail" && <LogicEditorCard
