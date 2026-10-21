@@ -51,6 +51,9 @@ import {
   type ResponseLogicTaskStatusEnvelope,
 } from "../contracts/response-logic.js";
 import "./response-logic-workspace.css";
+import {ResponseLogicEvaluationPanel} from "./response-logic/evaluation-panel.js";
+import {ResponseLogicOptimizationWorkflow} from "./response-logic/optimization-workflow.js";
+import {createDemoEvaluation, fingerprintLogic, type LogicSections} from "./response-logic/mock-evaluation.js";
 import {
   parseResponseLogicReply as parseResponseLogicReplyCore,
   getResponseLogicPollDelay as getResponseLogicPollDelayCore,
@@ -1186,6 +1189,8 @@ function ResponseLogicQuestionEditor({
     state: "idle",
   });
   const startLock = useRef(false);
+  const [demoView, setDemoView] = useState<"detail"|"evaluation"|"optimize">("detail");
+  const [demoEvaluation, setDemoEvaluation] = useState<ReturnType<typeof createDemoEvaluation>|null>(null);
 
   const persistedRecord = persistence.records?.find(
     (record) => record.questionId === questionId,
@@ -1758,6 +1763,14 @@ function ResponseLogicQuestionEditor({
   );
   const showGenerationEntry =
     !generating && !hasAdoptedContent && !generation;
+  const currentLogic: LogicSections = {concern:draft.concern,conclusion:draft.conclusion,facts:draft.facts,boundaries:draft.boundaries};
+  const currentFingerprint = fingerprintLogic(currentLogic);
+  const currentVersion = persistedRecord?.confirmed?.version ?? null;
+  const currentRevision = persistedRecord?.revision ?? 0;
+  const validDemoEvaluation = demoEvaluation?.questionId===questionId && demoEvaluation.version===currentVersion && demoEvaluation.revision===currentRevision && demoEvaluation.sourceFingerprint===currentFingerprint ? demoEvaluation : null;
+  const showDemo = Boolean(draft.concern.trim() || draft.conclusion.trim() || draft.facts.trim() || draft.boundaries.trim());
+  const beginDemoEvaluation = () => {setDemoEvaluation(createDemoEvaluation({questionId,question:question.question,intent:question.intent,version:currentVersion,revision:currentRevision,logic:currentLogic}));setDemoView("evaluation")};
+
   const showGenerationProcess =
     generating ||
     Boolean(generation?.completedAt) ||
@@ -1872,7 +1885,23 @@ function ResponseLogicQuestionEditor({
         </section>
       )}
 
-      <LogicEditorCard
+      {showDemo && demoView === "detail" && (
+        <div className="rl-eval-entry" style={{display:"flex",gap:10,flexWrap:"wrap",margin:"18px 0"}}>
+          <button type="button" className="rl-primary-button" onClick={beginDemoEvaluation}>查看四维评估（演示）</button>
+          <button type="button" className="rl-text-button" onClick={() => {if (!validDemoEvaluation) {setDemoEvaluation(createDemoEvaluation({questionId,question:question.question,intent:question.intent,version:currentVersion,revision:currentRevision,logic:currentLogic}));}setDemoView("optimize")}}>生成优化应答逻辑（演示）</button>
+        </div>
+      )}
+      {showDemo && demoView === "evaluation" && validDemoEvaluation && (
+        <ResponseLogicEvaluationPanel evaluation={validDemoEvaluation} onBack={()=>setDemoView("detail")} onOptimize={()=>setDemoView("optimize")}/>
+      )}
+      {showDemo && demoView === "optimize" && validDemoEvaluation && (
+        <ResponseLogicOptimizationWorkflow key={`${questionId}:${currentVersion}:${currentRevision}:${currentFingerprint}`} evaluation={validDemoEvaluation} logic={currentLogic} onBack={()=>setDemoView("evaluation")}/>
+      )}
+      {demoView !== "detail" && !validDemoEvaluation && (
+        <div className="rl-eval-entry" role="status">当前应答逻辑或版本已变化，演示评分已失效。<button type="button" className="rl-text-button" onClick={beginDemoEvaluation}>重新查看演示评估</button><button type="button" className="rl-text-button" onClick={()=>setDemoView("detail")}>返回应答逻辑编辑</button></div>
+      )}
+
+      {demoView === "detail" && <LogicEditorCard
         draft={draft}
         frozen={generating || publishing}
         publishing={publishing}
@@ -1887,7 +1916,7 @@ function ResponseLogicQuestionEditor({
           event.target.value = "";
         }}
         onRemoveMaterial={(fileId) => void removeMaterial(fileId)}
-      />
+      />}
 
       {(publishError || stashStatus.state === "error") && (
         <div className="rl-single-page-footer-error" role="alert">

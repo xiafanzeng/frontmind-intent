@@ -1,0 +1,6 @@
+import type {ReactNode} from "react";
+export function DemoBanner(){return <div className="rl-eval-method" role="note">演示评估（未接真实后端） · 评分和优化建议为前端占位数据，不代表 Ragas、DeepEval 或真实 Judge 结果。</div>;}
+/** The final step is visibly unavailable, not marked complete by a demo. */
+export function WorkbenchSteps({step}:{step:1|2}){return <div className="rl-eval-steps" aria-label="优化流程">{["查看评估","确认优化","采用完成"].map((title,index)=><div key={title} className={index+1===step?"active":index+1<step?"finished":index===2?"unavailable":""}><span>{index+1<step?"✓":index+1}</span>{title}{index===2&&<small>待后端</small>}{index<2&&<i/>}</div>)}</div>;}
+export function Score({value}:{value:number|null}){return <div className="rl-eval-score">{value===null?<strong className="rl-eval-not-rated">未评估</strong>:<><strong className={value>=80?"good":value>=50?"warn":"bad"}>{value}<small> / 100</small></strong><span className={`rl-eval-score-inline ${value>=80?"good":value>=50?"warn":"bad"}`} role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={value} aria-label="演示评分"><i style={{width:`${value}%`}}/></span></>}</div>;}
+export function WorkbenchCard({title,children}:{title:string;children:ReactNode}){return <section className="rl-eval-card rl-eval-score-card"><h3>{title}</h3>{children}</section>;}
