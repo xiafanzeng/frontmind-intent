@@ -91,3 +91,5 @@
 .rl-single-page .rl-opt-adopted .rl-opt-compare{padding:0 18px 18px}
 .rl-single-page .rl-opt-adopted-actions{display:flex;justify-content:flex-end;gap:8px;padding:14px 18px;border-top:1px solid var(--iw-line);flex-wrap:wrap}
 .rl-single-page .rl-eval-submethod{font-size:11px;color:#98a2b3;margin:8px 0 0}
+.rl-single-page .rl-eval-detail-matrix{max-height:440px}
+.rl-single-page .rl-eval-detail-heading{font-size:13px;font-weight:600;color:var(--iw-ink);margin:0 0 8px}
