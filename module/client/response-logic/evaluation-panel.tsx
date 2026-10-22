@@ -1,16 +1,17 @@
-import type {DemoEvaluation} from "./mock-evaluation.js";
+import {useMemo,useState} from "react";
+import {buildDiagnosis,type DemoEvaluation,type LogicField} from "./mock-evaluation.js";
 import {Score,WorkbenchCard,WorkbenchSteps} from "./workbench-parts.js";
 import "./evaluation.css";
 
 /** Presentation counterpart to brand IntentWorkbench's iw-evaluation. Data is frontend sample data; the diagnosis method area states this. */
-export function ResponseLogicEvaluationPanel({evaluation,onBack,onOptimize}:{evaluation:DemoEvaluation;onBack:()=>void;onOptimize:()=>void}){
+export function ResponseLogicEvaluationPanel({evaluation,onBack,onOptimize,onLocate}:{evaluation:DemoEvaluation;onBack:()=>void;onOptimize:()=>void;onLocate?:(field:LogicField)=>void}){
   const {dimensions}=evaluation;
-  const findings=[
-    ...dimensions.relevance.issues,
-    ...dimensions.completeness.coverage.filter(item=>item.status!=="covered").map(item=>`${item.label}（${item.statusText}）：${item.suggestion}`),
-    ...dimensions.actionability.subMetrics.filter(item=>item.score<80).map(item=>`${item.label.split("（")[0]} ${item.score} 分：${item.suggestion}`),
-    dimensions.boundaryRisk.note,
-  ];
+  const [expandedId,setExpandedId]=useState<string|null>(null);
+  const diagnoses=useMemo(()=>buildDiagnosis(evaluation),[evaluation]);
+  const status=diagnoses.some(item=>item.severity==="risk")
+    ?{label:"存在风险",tone:"risk" as const}
+    :diagnoses.length?{label:"待完善",tone:"improve" as const}
+    :{label:"暂无待处理问题",tone:"ok" as const};
   return <section className="rl-eval-root" aria-label="应答逻辑评估">
     <div className="rl-eval-back"><button type="button" className="rl-eval-back-button" onClick={onBack}>← 返回应答逻辑详情</button></div>
     <header className="rl-eval-heading"><div><h2>应答逻辑评估 · {evaluation.question}</h2><p>Intent：{evaluation.intent||"未提供"} · 四项独立评分，不设综合分</p></div></header>
@@ -24,7 +25,17 @@ export function ResponseLogicEvaluationPanel({evaluation,onBack,onOptimize}:{eva
           <WorkbenchCard title="Boundary / Risk Control"><Score value={dimensions.boundaryRisk.score}/><p className="rl-eval-score-description">{dimensions.boundaryRisk.note}</p><details className="rl-eval-dimensions"><summary>查看风险检查清单 <span aria-hidden="true">⌄</span></summary><div className="rl-eval-detail-content">{dimensions.boundaryRisk.risks.map((risk,i)=><div className="rl-eval-risk" key={i}><b>{risk.kind}</b><span className={`rl-eval-tag ${risk.controlled?"supported":risk.status==="已识别未设边界"?"partial":""}`}>{risk.status}</span>{risk.excerpt&&<p className="rl-eval-evidence">原文片段：…{risk.excerpt}…</p>}<p>{risk.guidance}</p></div>)}<p className="rl-eval-submethod">{dimensions.boundaryRisk.method}</p></div></details></WorkbenchCard>
         </div>
       </div>
-      <aside className="rl-eval-diagnosis rl-eval-card"><h3>诊断摘要</h3><div className="rl-eval-findings">{findings.map((finding,i)=><p key={i}><span aria-hidden="true">✦</span>{finding}</p>)}</div><div className="rl-eval-diagnosis-method">数据来源：前端示例数据（基于当前文本的规则展示，未接入真实 Judge / Ragas / DeepEval）<br/>Question ID：{evaluation.questionId}<br/>对应版本：{evaluation.version===null?"未发布":`v${evaluation.version}`} · Revision {evaluation.revision} · 内容指纹已绑定，版本变化后需重新评估</div></aside>
+      <aside className="rl-eval-diagnosis rl-eval-card"><h3>诊断摘要 <span className={`rl-dx-status ${status.tone}`}>{status.label}</span><small>{diagnoses.length ? `${diagnoses.length} 项待处理` : ""}</small></h3>
+        {diagnoses.length?<div className="rl-dx-list">{diagnoses.map(item=><details className="rl-dx-item" key={item.id} open={expandedId===item.id} onToggle={event=>setExpandedId(event.currentTarget.open?item.id:null)}>
+          <summary><b>{item.title}</b><span className="rl-dx-dim">{item.dimensionLabel}</span><span className={`rl-eval-tag ${item.severity==="risk"?"missing":"partial"}`}>{item.severity==="risk"?"风险提示":"需完善"}</span><span className="rl-cov-chevron" aria-hidden="true">⌄</span></summary>
+          <div className="rl-dx-body">
+            <p><b>问题原因</b>{item.reason}</p>
+            <p><b>对应内容</b>{item.dimensionLabel} · {item.targetLabel}：<span className="rl-eval-evidence">{item.excerpt||"（当前为空）"}{item.excerpt.length>=80?"…":""}</span></p>
+            <p><b>修改建议</b>{item.suggestion}</p>
+            <button type="button" className="rl-dx-locate" onClick={()=>onLocate?.(item.targetField)}>定位到对应内容 →</button>
+          </div>
+        </details>)}</div>:<p className="rl-dx-empty">当前四项检查未发现待处理问题。</p>}
+        <div className="rl-eval-diagnosis-method">数据来源：前端示例数据（基于当前文本的规则展示，未接入真实 Judge / Ragas / DeepEval）<br/>Question ID：{evaluation.questionId}<br/>对应版本：{evaluation.version===null?"未发布":`v${evaluation.version}`} · Revision {evaluation.revision} · 内容指纹已绑定，版本变化后需重新评估</div></aside>
     </div>
     <div className="rl-eval-actions"><span>优化建议需人工审核后采用；采用为本地预览状态，不写入服务器。</span><button type="button" className="rl-eval-outline" onClick={onBack}>返回详情</button><button type="button" className="rl-eval-primary" onClick={onOptimize}>生成优化方案 →</button></div>
   </section>;

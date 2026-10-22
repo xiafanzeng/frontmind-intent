@@ -112,3 +112,28 @@
 .rl-single-page .rl-cov-body p{margin:0 0 8px;font-size:12px;line-height:1.75;overflow-wrap:anywhere}
 .rl-single-page .rl-cov-body p:last-child{margin-bottom:0}
 .rl-single-page .rl-cov-body b{color:var(--iw-purple);font-weight:600;margin-right:6px}
+/* 诊断摘要：状态徽标 + 轻量纵向列表（白底细线，取代大面积灰紫卡） */
+.rl-single-page .rl-dx-status{font-size:11px;padding:3px 8px;border-radius:5px;white-space:nowrap}
+.rl-single-page .rl-dx-status.improve{color:#a86722;background:#fbf1e4}
+.rl-single-page .rl-dx-status.risk{color:#b64d52;background:#faecee}
+.rl-single-page .rl-dx-status.ok{color:#16794f;background:#eaf5ef}
+.rl-single-page .rl-dx-list{display:flex;flex-direction:column;min-width:0}
+.rl-single-page .rl-dx-item{border:0;border-bottom:1px solid var(--iw-line);background:#fff;min-width:0}
+.rl-single-page .rl-dx-item:last-of-type{border-bottom:0}
+.rl-single-page .rl-dx-item>summary{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:11px 14px;cursor:pointer;list-style:none;font-size:12px;min-width:0}
+.rl-single-page .rl-dx-item>summary::-webkit-details-marker{display:none}
+.rl-single-page .rl-dx-item>summary>b{font-size:13px;font-weight:550;flex:1 1 100%;line-height:1.5;overflow-wrap:anywhere}
+.rl-single-page .rl-dx-item .rl-dx-dim{color:#98a2b3;font-size:11px;white-space:nowrap}
+.rl-single-page .rl-dx-item .rl-cov-chevron{margin-left:auto;color:#98a2b3;transition:transform .15s ease}
+.rl-single-page .rl-dx-item[open] .rl-cov-chevron{transform:rotate(180deg)}
+.rl-single-page .rl-dx-item[open]>summary{background:#faf7fc}
+.rl-single-page .rl-dx-body{padding:4px 14px 14px;min-width:0}
+.rl-single-page .rl-dx-body p{margin:0 0 8px;font-size:12px;line-height:1.75;overflow-wrap:anywhere}
+.rl-single-page .rl-dx-body b{color:var(--iw-purple);font-weight:600;margin-right:6px}
+.rl-single-page .rl-dx-locate{display:inline-flex;align-items:center;min-height:30px;padding:5px 12px;border:1px solid #7545a0;border-radius:8px;background:#fff;color:#7545a0;font:inherit;font-size:12px;font-weight:500;cursor:pointer}
+.rl-single-page .rl-dx-locate:hover{background:#faf7fc}
+.rl-single-page .rl-dx-locate:focus-visible{outline:2px solid #7545a0;outline-offset:3px}
+.rl-single-page .rl-dx-empty{padding:16px 14px;color:var(--iw-muted);font-size:12px;margin:0}
+/* 定位高亮：编辑区锚点在 .rl-eval-root 作用域之外，颜色使用字面量 */
+@keyframes rl-locate-pulse{0%{background-color:#f7f0fc;box-shadow:inset 0 0 0 2px #7545a0}100%{background-color:transparent;box-shadow:inset 0 0 0 2px transparent}}
+.rl-editor-field.rl-locate-flash{animation:rl-locate-pulse 1.6s ease-out 2;border-radius:10px}

@@ -157,3 +157,86 @@ export function createDemoOptimization(logic:LogicSections,context?:{question:st
   });
   return {kind:"sample-optimization" as const,sections};
 }
+
+export type DiagnosisSeverity = "improve" | "risk";
+export type DiagnosisDimension = "relevance" | "completeness" | "actionability" | "boundaryRisk";
+export type DiagnosisItem = {
+  id: string;
+  dimension: DiagnosisDimension;
+  dimensionLabel: string;
+  severity: DiagnosisSeverity;
+  title: string;
+  summary: string;
+  reason: string;
+  excerpt: string;
+  targetField: LogicField;
+  targetLabel: string;
+  suggestion: string;
+};
+const DIMENSION_LABELS: Record<DiagnosisDimension, string> = {
+  relevance: "Answer Relevance", completeness: "Completeness",
+  actionability: "Actionability", boundaryRisk: "Boundary / Risk Control",
+};
+/**
+ * Derive the actionable diagnosis list from one demo evaluation. Pure and
+ * deterministic; each item keeps a stable id plus a target logic field so the
+ * UI can locate the exact editor section without title matching.
+ */
+export function buildDiagnosis(evaluation: DemoEvaluation): DiagnosisItem[] {
+  const { dimensions, logic, question } = evaluation;
+  const items: DiagnosisItem[] = [];
+  const qTerms = terms(question);
+  const matched = qTerms.filter(term => logic.conclusion.includes(term) || logic.concern.includes(term));
+  const missingTerms = qTerms.filter(term => !matched.includes(term));
+  if (missingTerms.length) {
+    items.push({
+      id: "dx-relevance-conclusion", dimension: "relevance", dimensionLabel: DIMENSION_LABELS.relevance,
+      severity: "improve", title: "核心结论未直接回应问题",
+      summary: `问题关键词「${missingTerms.slice(0, 2).join("、")}」没有进入核心结论。`,
+      reason: `在「核心结论/执行口径」与「用户真实关心」中检索问题「${question}」的关键词（${qTerms.slice(0, 3).join("、") || "无"}），其中「${missingTerms.join("、")}」未出现，读者需要自行推断回答与问题的关联，存在答非所问的观感。`,
+      excerpt: logic.conclusion.slice(0, 80),
+      targetField: "conclusion", targetLabel: "核心结论 / 执行口径",
+      suggestion: "在结论首句直接回应问题主语与决策动作，并让每个问题关键词都能在执行口径中找到对应条目。",
+    });
+  }
+  for (const item of dimensions.completeness.coverage) {
+    if (item.status === "covered") continue;
+    items.push({
+      id: `dx-completeness-${item.field}`, dimension: "completeness", dimensionLabel: DIMENSION_LABELS.completeness,
+      severity: "improve",
+      title: item.status === "missing" ? `「${item.label}」缺失` : `「${item.label}」覆盖不足`,
+      summary: item.situation,
+      reason: item.basis,
+      excerpt: logic[item.field].slice(0, 80),
+      targetField: item.field, targetLabel: item.label,
+      suggestion: item.suggestion,
+    });
+  }
+  const lowSub = dimensions.actionability.subMetrics.filter(sub => sub.score < 80);
+  if (lowSub.length) {
+    const evidenceWeak = lowSub.some(sub => sub.key === "evidence_guidance");
+    items.push({
+      id: "dx-actionability-specificity", dimension: "actionability", dimensionLabel: DIMENSION_LABELS.actionability,
+      severity: "improve", title: lowSub.length >= 2 ? "执行口径不够具体" : `${lowSub[0].label.split("（")[0]}偏弱`,
+      summary: `${lowSub.map(sub => `${sub.label.split("（")[0]} ${sub.score} 分`).join("、")}${lowSub.length >= 2 ? "多项偏弱" : ""}。`,
+      reason: lowSub.map(sub => `${sub.label.split("（")[0]}：${sub.reason}`).join("；"),
+      excerpt: (evidenceWeak ? logic.facts : logic.conclusion).slice(0, 80),
+      targetField: evidenceWeak ? "facts" : "conclusion",
+      targetLabel: evidenceWeak ? "企业材料 / 官方依据" : "核心结论 / 执行口径",
+      suggestion: lowSub.map(sub => sub.suggestion).join("；"),
+    });
+  }
+  const unbounded = dimensions.boundaryRisk.risks.filter(risk => risk.status === "已识别未设边界");
+  if (unbounded.length) {
+    items.push({
+      id: "dx-boundary-uncontrolled", dimension: "boundaryRisk", dimensionLabel: DIMENSION_LABELS.boundaryRisk,
+      severity: "risk", title: "回答边界需要明确",
+      summary: `${unbounded.length} 类风险表述未设置对应边界：${unbounded.map(risk => risk.kind).join("、")}。`,
+      reason: `正文中检出 ${unbounded.map(risk => `「${risk.kind}」${risk.excerpt ? `（…${risk.excerpt.slice(0, 18)}…）` : ""}`).join("、")}等表述，但「回答边界/禁止表达」中没有对应的约束条目，生成内容时可能直接输出这些说法。`,
+      excerpt: logic.boundaries.slice(0, 80),
+      targetField: "boundaries", targetLabel: "回答边界 / 禁止表达",
+      suggestion: `在回答边界中逐条补充：${unbounded.map(risk => risk.guidance).join("；")}。`,
+    });
+  }
+  return items.slice(0, 6);
+}

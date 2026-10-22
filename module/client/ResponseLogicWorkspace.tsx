@@ -53,7 +53,7 @@ import {
 import "./response-logic-workspace.css";
 import {ResponseLogicEvaluationPanel} from "./response-logic/evaluation-panel.js";
 import {ResponseLogicOptimizationWorkflow} from "./response-logic/optimization-workflow.js";
-import {createDemoEvaluation, fingerprintLogic, type LogicSections} from "./response-logic/mock-evaluation.js";
+import {createDemoEvaluation, fingerprintLogic, type LogicField, type LogicSections} from "./response-logic/mock-evaluation.js";
 import {
   parseResponseLogicReply as parseResponseLogicReplyCore,
   getResponseLogicPollDelay as getResponseLogicPollDelayCore,
@@ -133,6 +133,19 @@ export type ResponseLogicPreviewAdapter = {
     group: IntentQuestionGroup,
   ) => ConfirmedResponseLogic;
   Dialogue: ComponentType<ResponseLogicPreviewDialogueProps>;
+};
+
+const locateLogicField = (field: LogicField, showDetail: () => void) => {
+  showDetail();
+  window.setTimeout(() => {
+    const el = document.getElementById(`rl-logic-${field}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.remove("rl-locate-flash");
+    void el.offsetWidth;
+    el.classList.add("rl-locate-flash");
+    window.setTimeout(() => el.classList.remove("rl-locate-flash"), 3200);
+  }, 90);
 };
 
 function createEmptyDraft(question: IntentQuestion): LogicDraft {
@@ -994,7 +1007,7 @@ function PreviewResponseLogicEditor({
         </div>
       )}
       {showDemo && demoView === "evaluation" && validDemoEvaluation && (
-        <ResponseLogicEvaluationPanel evaluation={validDemoEvaluation} onBack={()=>setDemoView("detail")} onOptimize={()=>setDemoView("optimize")}/>
+        <ResponseLogicEvaluationPanel evaluation={validDemoEvaluation} onBack={()=>setDemoView("detail")} onOptimize={()=>setDemoView("optimize")} onLocate={field=>locateLogicField(field, ()=>setDemoView("detail"))}/>
       )}
       {showDemo && demoView === "optimize" && validDemoEvaluation && (
         <ResponseLogicOptimizationWorkflow key={`${questionId}:preview:${previewFingerprint}`} evaluation={validDemoEvaluation} logic={previewLogic} onBack={()=>setDemoView("evaluation")}/>
@@ -1914,7 +1927,7 @@ function ResponseLogicQuestionEditor({
         </div>
       )}
       {showDemo && demoView === "evaluation" && validDemoEvaluation && (
-        <ResponseLogicEvaluationPanel evaluation={validDemoEvaluation} onBack={()=>setDemoView("detail")} onOptimize={()=>setDemoView("optimize")}/>
+        <ResponseLogicEvaluationPanel evaluation={validDemoEvaluation} onBack={()=>setDemoView("detail")} onOptimize={()=>setDemoView("optimize")} onLocate={field=>locateLogicField(field, ()=>setDemoView("detail"))}/>
       )}
       {showDemo && demoView === "optimize" && validDemoEvaluation && (
         <ResponseLogicOptimizationWorkflow key={`${questionId}:${currentVersion}:${currentRevision}:${currentFingerprint}`} evaluation={validDemoEvaluation} logic={currentLogic} onBack={()=>setDemoView("evaluation")}/>
@@ -2030,21 +2043,24 @@ function LogicEditorCard({
       <fieldset className="rl-editor-scroll" disabled={frozen}>
         <EditorField
           index="01"
-          label="用户真实关心"
+          fieldId="rl-logic-concern"
+                    label="用户真实关心"
           value={draft.concern}
           onChange={(concern) => onPatch({ concern })}
           rows={3}
         />
         <EditorField
           index="02"
-          label="核心结论/执行口径"
+          fieldId="rl-logic-conclusion"
+                    label="核心结论/执行口径"
           value={draft.conclusion}
           onChange={(conclusion) => onPatch({ conclusion })}
           rows={8}
         />
         <EditorField
           index="03"
-          label={RESPONSE_LOGIC_FACTS_DISPLAY_HEADING}
+          fieldId="rl-logic-facts"
+                    label={RESPONSE_LOGIC_FACTS_DISPLAY_HEADING}
           hint="事实依据每行一项，后续应与可追溯来源一一对应"
           value={draft.facts}
           onChange={(facts) => onPatch({ facts })}
@@ -2052,7 +2068,8 @@ function LogicEditorCard({
         />
         <EditorField
           index="04"
-          label="回答边界/禁止表达"
+          fieldId="rl-logic-boundaries"
+                    label="回答边界/禁止表达"
           value={draft.boundaries}
           onChange={(boundaries) => onPatch({ boundaries })}
           rows={5}
@@ -2178,6 +2195,7 @@ function EditorField({
   value,
   onChange,
   rows,
+  fieldId,
 }: {
   index: string;
   label: string;
@@ -2185,9 +2203,10 @@ function EditorField({
   value: string;
   onChange: (value: string) => void;
   rows: number;
+  fieldId?: string;
 }) {
   return (
-    <div className="rl-editor-field">
+    <div className="rl-editor-field" id={fieldId}>
       <div className="rl-editor-label">
         <span>{index}</span>
         <div>
