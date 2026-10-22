@@ -89,10 +89,10 @@ describe("Response Logic frontend-sample evaluation",()=>{
   for(const title of ["Answer Relevance","Completeness","Actionability","Boundary / Risk Control"]){expect(markup).toContain(title);}
   expect(markup).toContain("rl-eval-layout");
   expect(markup).toContain("rl-eval-diagnosis");
-  expect(markup).toContain("Completeness · 回答蓝图完整性");
   expect((markup.match(/rl-cov-item/g)||[]).length).toBeGreaterThanOrEqual(4);
   expect((markup.match(/rl-eval-table-scroll/g)||[]).length).toBe(0);
-  expect(markup).toContain("查看完整性详情：四项必要内容");
+  expect((markup.match(/评估规则介绍/g)||[]).length).toBe(4);
+  expect((markup.match(/查看详情/g)||[]).length).toBe(4);
   expect(markup).toContain("覆盖情况");
   expect(markup).toContain("判断依据");
   expect(markup).not.toContain('class="rl-eval-matrix');

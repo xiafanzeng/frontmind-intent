@@ -34,7 +34,7 @@
 .rl-single-page .rl-eval-dimensions{border-top:1px solid var(--iw-line);margin-top:14px;padding-top:10px}
 .rl-single-page .rl-eval-dimensions summary{display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--iw-purple);font-size:12px;list-style:none}
 .rl-single-page .rl-eval-dimensions summary::-webkit-details-marker{display:none}.rl-single-page .rl-eval-dimensions summary>span{margin-left:auto}
-.rl-single-page .rl-eval-detail-content{border:1px solid #dfd0e9;border-radius:10px;background:#fff;padding:12px;margin-top:10px;box-shadow:0 4px 16px #25102b0d;max-height:320px;overflow:auto}
+.rl-single-page .rl-eval-detail-content{border:0;background:#fff;padding:2px 0 0;margin-top:0}
 .rl-single-page .rl-eval-detail-content li,.rl-single-page .rl-eval-detail-content p{font-size:12px!important;line-height:1.75!important;overflow-wrap:anywhere}
 .rl-single-page .rl-eval-submetric,.rl-single-page .rl-eval-risk{padding:10px 0;border-bottom:1px solid var(--iw-line)}
 .rl-single-page .rl-eval-submetric>div{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px}
@@ -91,7 +91,7 @@
 .rl-single-page .rl-opt-adopted .rl-opt-compare{padding:0 18px 18px}
 .rl-single-page .rl-opt-adopted-actions{display:flex;justify-content:flex-end;gap:8px;padding:14px 18px;border-top:1px solid var(--iw-line);flex-wrap:wrap}
 .rl-single-page .rl-eval-submethod{font-size:11px;color:#98a2b3;margin:8px 0 0}
-.rl-single-page .rl-eval-detail-matrix{max-height:440px}
+
 .rl-single-page .rl-eval-detail-heading{font-size:13px;font-weight:600;color:var(--iw-ink);margin:0 0 8px}
 
 /* 顶部两个入口按钮：同等视觉层级、统一紫色系（对齐优化问题按钮体系） */
@@ -138,3 +138,36 @@
 @keyframes rl-locate-pulse{0%{background-color:#f7f0fc;box-shadow:inset 0 0 0 2px #7545a0}100%{background-color:transparent;box-shadow:inset 0 0 0 2px transparent}}
 .rl-editor-field.rl-locate-flash{animation:rl-locate-pulse 1.6s ease-out 2;border-radius:10px}
 .rl-single-page .rl-eval-tag.neutral{color:#667085;background:#f2f4f7}
+
+/* 评估卡片双入口：查看详情 / 评估规则介绍（同级轻量展开） */
+.rl-single-page .rl-eval-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.rl-single-page .rl-eval-tab{border:1px solid var(--iw-line);border-radius:10px;background:#fff;min-width:0}
+.rl-single-page .rl-eval-tab>summary{display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 10px;cursor:pointer;list-style:none;font-size:12px;font-weight:500;color:var(--iw-purple);min-height:34px}
+.rl-single-page .rl-eval-tab>summary::-webkit-details-marker{display:none}
+.rl-single-page .rl-eval-tab>summary:hover{background:#faf7fc}
+.rl-single-page .rl-eval-tab>summary:focus-visible{outline:2px solid var(--iw-purple);outline-offset:2px}
+.rl-single-page .rl-eval-tab[open]>summary{border-color:#d9c7e5;background:#faf7fc}
+.rl-single-page .rl-eval-tab>summary span{transition:transform .15s ease;font-size:11px}
+.rl-single-page .rl-eval-tab[open]>summary span{transform:rotate(180deg)}
+.rl-single-page .rl-eval-tab .rl-eval-detail-content{padding:10px 12px 12px;border-top:1px solid var(--iw-line)}
+/* 四级字体层级：L1 维度标题由卡片 h3 统一；L2 必要内容标题（品牌紫）；L3 详情子标题（块级标签）；L4 正文 */
+.rl-single-page .rl-cov-item>summary>b{color:var(--iw-purple);font-weight:600}
+.rl-single-page .rl-eval-detail-content p{margin:0 0 12px;font-size:12.5px;line-height:1.9;color:#475467;overflow-wrap:anywhere}
+.rl-single-page .rl-eval-detail-content p:last-child{margin-bottom:0}
+.rl-single-page .rl-eval-detail-content>b,.rl-single-page .rl-eval-detail-content p>b,.rl-single-page .rl-cov-body p>b,.rl-single-page .rl-dx-body p>b{display:block;font-size:12px;font-weight:600;color:#344054;margin-bottom:4px}
+.rl-single-page .rl-eval-detail-content ul.rl-eval-issues{margin:0 0 12px;padding-left:18px;font-size:12.5px;line-height:1.9;color:#475467}
+.rl-single-page .rl-eval-detail-content ul.rl-eval-issues li{margin-bottom:6px}
+.rl-single-page .rl-eval-submetric{border:1px solid var(--iw-line);border-radius:10px;padding:12px;margin-bottom:10px}
+.rl-single-page .rl-eval-submetric:last-child{margin-bottom:0}
+.rl-single-page .rl-eval-submetric-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.rl-single-page .rl-eval-submetric-head b{color:var(--iw-purple);font-weight:600;font-size:13px}
+.rl-single-page .rl-eval-submetric-head span{font-size:12px;color:var(--iw-muted)}
+.rl-single-page .rl-eval-submetric p{margin:0 0 8px;font-size:12.5px;line-height:1.85;color:#475467}
+.rl-single-page .rl-eval-submetric small{display:block;font-size:12px;line-height:1.8;color:#475467;margin-bottom:6px}
+.rl-single-page .rl-eval-risk{border:1px solid var(--iw-line);border-radius:10px;padding:12px;margin-bottom:10px}
+.rl-single-page .rl-eval-risk:last-of-type{margin-bottom:12px}
+.rl-single-page .rl-eval-risk>b{display:inline-block;font-size:13px;font-weight:600;color:#344054;margin-right:8px}
+.rl-single-page .rl-eval-risk>p{margin:8px 0 0;font-size:12.5px;line-height:1.85;color:#475467}
+.rl-single-page .rl-eval-rules p{padding-left:0}
+/* 状态标签统一规格（低饱和绿/橙/红） */
+.rl-single-page .rl-eval-tag{display:inline-block;white-space:nowrap;font-size:11px;line-height:18px;padding:3px 8px;border-radius:5px;font-weight:500}
