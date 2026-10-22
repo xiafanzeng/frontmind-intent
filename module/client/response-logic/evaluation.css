@@ -72,8 +72,8 @@
 .rl-single-page .rl-opt-editor{align-self:start}.rl-single-page .rl-opt-editor-body{padding:20px}
 .rl-single-page .rl-opt-editor h3>.rl-eval-tag{margin-left:auto}.rl-single-page .rl-opt-evidence{font-size:12px;color:#667085;line-height:1.8;margin:0 0 12px;overflow-wrap:anywhere}
 .rl-single-page .rl-opt-before,.rl-single-page .rl-opt-after{border-radius:8px;padding:12px;min-width:0}
-.rl-single-page .rl-opt-before{background:#fff3f4;border:1px solid #e7cdd1;color:#9c4b55}
-.rl-single-page .rl-opt-after{background:#f4faf7;border:1px solid #d6ebde;margin-top:14px;color:var(--iw-green)}
+.rl-single-page .rl-opt-before{background:#fff;border:1px solid var(--iw-line);border-left:3px solid var(--iw-red);color:var(--iw-ink)}
+.rl-single-page .rl-opt-after{background:#fff;border:1px solid var(--iw-line);border-left:3px solid var(--iw-green);margin-top:14px;color:var(--iw-ink)}
 .rl-single-page .rl-opt-before b,.rl-single-page .rl-opt-after label,.rl-single-page .rl-opt-after b{display:block;font-size:12px;font-weight:600;margin-bottom:8px}
 .rl-single-page .rl-opt-before p,.rl-single-page .rl-opt-after p{font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.8;margin:0;color:inherit}
 .rl-single-page .rl-opt-after textarea{display:block;width:100%;min-height:150px;border:1px solid #d0d5dd;border-radius:8px;padding:10px 12px;font:inherit;line-height:1.9;resize:vertical;background:#fff;color:#344054}
@@ -93,3 +93,21 @@
 .rl-single-page .rl-eval-submethod{font-size:11px;color:#98a2b3;margin:8px 0 0}
 .rl-single-page .rl-eval-detail-matrix{max-height:440px}
 .rl-single-page .rl-eval-detail-heading{font-size:13px;font-weight:600;color:var(--iw-ink);margin:0 0 8px}
+
+/* 顶部两个入口按钮：同等视觉层级、统一紫色系（对齐优化问题按钮体系） */
+.rl-single-page .rl-eval-entry-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:7px 14px;border:1px solid var(--iw-purple);border-radius:8px;background:#fff;color:var(--iw-purple);font:inherit;font-weight:500;cursor:pointer}
+.rl-single-page .rl-eval-entry-button:hover{background:#faf7fc;border-color:var(--iw-purple)}
+.rl-single-page .rl-eval-entry-button:disabled{opacity:.45;cursor:not-allowed}
+.rl-single-page .rl-eval-entry-button:focus-visible{outline:2px solid var(--iw-purple);outline-offset:3px}
+/* Completeness 四项必要内容：纵向手风琴（无横向滚动） */
+.rl-single-page .rl-cov-item{border:1px solid var(--iw-line);border-radius:10px;background:#fff;margin-bottom:10px;min-width:0}
+.rl-single-page .rl-cov-item:last-child{margin-bottom:0}
+.rl-single-page .rl-cov-item>summary{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;list-style:none;font-size:13px;min-width:0}
+.rl-single-page .rl-cov-item>summary::-webkit-details-marker{display:none}
+.rl-single-page .rl-cov-item>summary>b{font-weight:550}
+.rl-single-page .rl-cov-item .rl-cov-chevron{margin-left:auto;color:#98a2b3;flex-shrink:0;transition:transform .15s ease}
+.rl-single-page .rl-cov-item[open] .rl-cov-chevron{transform:rotate(180deg)}
+.rl-single-page .rl-cov-body{padding:12px 14px;border-top:1px solid var(--iw-line)}
+.rl-single-page .rl-cov-body p{margin:0 0 8px;font-size:12px;line-height:1.75;overflow-wrap:anywhere}
+.rl-single-page .rl-cov-body p:last-child{margin-bottom:0}
+.rl-single-page .rl-cov-body b{color:var(--iw-purple);font-weight:600;margin-right:6px}

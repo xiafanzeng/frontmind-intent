@@ -989,8 +989,8 @@ function PreviewResponseLogicEditor({
       <ResponseLogicPageHeader group={entry.group} question={entry.question} />
       {showDemo && demoView === "detail" && (
         <div className="rl-eval-entry" style={{display:"flex",gap:10,flexWrap:"wrap",margin:"18px 0"}}>
-          <button type="button" className="rl-primary-button" onClick={beginDemoEvaluation}>查看四维评估</button>
-          <button type="button" className="rl-text-button" onClick={() => {if (!validDemoEvaluation) {setDemoEvaluation(createDemoEvaluation({questionId:entry.question.id,question:entry.question.question,intent:entry.question.intent ?? "",version:null,revision:0,logic:previewLogic}));}setDemoView("optimize")}}>生成优化应答逻辑</button>
+          <button type="button" className="rl-eval-entry-button" onClick={beginDemoEvaluation}>查看四维评估</button>
+          <button type="button" className="rl-eval-entry-button" onClick={() => {if (!validDemoEvaluation) {setDemoEvaluation(createDemoEvaluation({questionId:entry.question.id,question:entry.question.question,intent:entry.question.intent ?? "",version:null,revision:0,logic:previewLogic}));}setDemoView("optimize")}}>生成优化应答逻辑</button>
         </div>
       )}
       {showDemo && demoView === "evaluation" && validDemoEvaluation && (
@@ -1909,8 +1909,8 @@ function ResponseLogicQuestionEditor({
 
       {showDemo && demoView === "detail" && (
         <div className="rl-eval-entry" style={{display:"flex",gap:10,flexWrap:"wrap",margin:"18px 0"}}>
-          <button type="button" className="rl-primary-button" onClick={beginDemoEvaluation}>查看四维评估</button>
-          <button type="button" className="rl-text-button" onClick={() => {if (!validDemoEvaluation) {setDemoEvaluation(createDemoEvaluation({questionId,question:question.question,intent:question.intent,version:currentVersion,revision:currentRevision,logic:currentLogic}));}setDemoView("optimize")}}>生成优化应答逻辑</button>
+          <button type="button" className="rl-eval-entry-button" onClick={beginDemoEvaluation}>查看四维评估</button>
+          <button type="button" className="rl-eval-entry-button" onClick={() => {if (!validDemoEvaluation) {setDemoEvaluation(createDemoEvaluation({questionId,question:question.question,intent:question.intent,version:currentVersion,revision:currentRevision,logic:currentLogic}));}setDemoView("optimize")}}>生成优化应答逻辑</button>
         </div>
       )}
       {showDemo && demoView === "evaluation" && validDemoEvaluation && (

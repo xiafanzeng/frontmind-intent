@@ -16,11 +16,10 @@ describe("Response Logic frontend-sample evaluation",()=>{
  it("returns four independent dimensions with rich per-dimension content and no aggregate",()=>{
   const result=createDemoEvaluation(input);
   expect(Object.keys(result.dimensions)).toEqual(["relevance","completeness","actionability","boundaryRisk"]);
-  expect(result.dimensions.completeness.coverage).toHaveLength(5);
+  expect(result.dimensions.completeness.coverage).toHaveLength(4);
+  expect(result.dimensions.completeness.coverage.map(i=>i.label)).toEqual(["用户真实关心","核心结论 / 执行口径","企业材料 / 官方依据","回答边界 / 禁止表达"]);
+  for(const item of result.dimensions.completeness.coverage){expect(item.situation.length).toBeGreaterThan(4);expect(item.basis.length).toBeGreaterThan(6);expect(item.suggestion.length).toBeGreaterThan(6);}
   expect(result.dimensions.actionability.subMetrics).toHaveLength(3);
-  for(const item of result.dimensions.completeness.coverage){
-   expect(item.reason.length).toBeGreaterThan(6);expect(item.suggestion.length).toBeGreaterThan(6);
-  }
   for(const item of result.dimensions.actionability.subMetrics){
    expect(item.score).toBeGreaterThanOrEqual(0);expect(item.score).toBeLessThanOrEqual(100);
    expect(item.reason.length).toBeGreaterThan(6);expect(item.suggestion.length).toBeGreaterThan(6);
@@ -48,8 +47,11 @@ describe("Response Logic frontend-sample evaluation",()=>{
   expect(markup).toContain("rl-eval-layout");
   expect(markup).toContain("rl-eval-diagnosis");
   expect(markup).toContain("Completeness · 回答蓝图完整性");
-  expect((markup.match(/rl-eval-table-scroll/g)||[]).length).toBe(1);
-  expect(markup).toContain("查看完整性详情：五项必要内容");
+  expect((markup.match(/rl-cov-item/g)||[]).length).toBeGreaterThanOrEqual(4);
+  expect((markup.match(/rl-eval-table-scroll/g)||[]).length).toBe(0);
+  expect(markup).toContain("查看完整性详情：四项必要内容");
+  expect(markup).toContain("覆盖情况");
+  expect(markup).toContain("判断依据");
   expect(markup).not.toContain('class="rl-eval-matrix');
   expect(markup).toContain("前端示例数据");
   expect(markup).not.toContain("演示评估（未接真实后端）");

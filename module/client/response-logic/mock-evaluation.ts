@@ -38,30 +38,39 @@ export function createDemoEvaluation(input:{questionId:string;question:string;in
   const structureMarkers=["口径","首句","分条","适用条件","顺序","先","再"].filter(m=>logic.conclusion.includes(m));
 
   const coverage=[
-    {key:"user_concern",label:"User Concern（用户真实关心）",text:logic.concern,
-      requirement:"应完整转述用户的决策疑问与在意点",
-      markers:()=>logic.concern.trim().length>=40&&logic.concern.includes("？")||logic.concern.trim().length>=40},
-    {key:"core_conclusion",label:"Core Conclusion（核心结论）",text:logic.conclusion,
-      requirement:"结论应直接回应问题并给出执行口径",
-      markers:()=>conclusionSentences.length>=2&&logic.conclusion.length>=60},
-    {key:"supporting_facts",label:"Supporting Facts（支撑事实）",text:logic.facts,
-      requirement:"逐条列出可核验的企业事实",
-      markers:()=>factLines.length>=3},
-    {key:"evidence",label:"Evidence（证据与来源）",text:logic.facts,
-      requirement:"每条事实应能绑定来源位置",
-      markers:()=>evidenceMarkers.length>=2},
-    {key:"boundary_caveat",label:"Boundary / Caveat（边界与限制）",text:logic.boundaries,
-      requirement:"应写明禁止表达与适用前提",
-      markers:()=>logic.boundaries.trim().length>=50},
-  ].map(({key,label,text,requirement,markers})=>{
-    const status=!text.trim()?"missing"as const:markers()?"covered"as const:"partial"as const;
-    const reason=status==="missing"?`「${label.split("（")[0]}」尚未填写：${requirement}。`
-      :status==="partial"?`已有内容（${text.trim().length} 字），但未达到“${requirement}”的完整形态。`
-      :`内容完整（${text.trim().length} 字），形态符合“${requirement}”。`;
-    const suggestion=status==="missing"?"补写该部分后再评估；空缺会直接拉低应答完整性。"
-      :status==="partial"?"在现有内容基础上补齐缺失的要素（见左侧要求），并保持逐条可核验。"
-      :"保持现状；后续接入真实 Judge 后再校验语义充分性。";
-    return {key,label,status,reason,suggestion};
+    {field:"concern" as const,label:"用户真实关心",text:logic.concern,
+      requirement:"完整转述用户的决策疑问与在意点",
+      sufficient:()=>logic.concern.trim().length>=40,
+      basis:(status:string,len:number)=>status==="missing"?"该部分为空：应答逻辑未回应用户视角。"
+        :status==="partial"?`已有 ${len} 字，但尚未完整覆盖“决策疑问 + 在意点”的完整表述（建议 ≥40 字并含问句或明确的在意点清单）。`
+        :`共 ${len} 字，包含明确的用户视角表述，覆盖情况良好。`},
+    {field:"conclusion" as const,label:"核心结论 / 执行口径",text:logic.conclusion,
+      requirement:"直接回应问题并给出可执行口径",
+      sufficient:()=>conclusionSentences.length>=2&&logic.conclusion.length>=60,
+      basis:(status:string,len:number)=>status==="missing"?"该部分为空：缺少回答的主结论。"
+        :status==="partial"?`共 ${len} 字 / ${conclusionSentences.length} 句，尚未形成“结论 + 执行口径”的完整结构（建议 ≥2 句且 ≥60 字，最好含编号步骤）。`
+        :`共 ${len} 字 / ${conclusionSentences.length} 句，结构上已包含结论与执行口径。`},
+    {field:"facts" as const,label:"企业材料 / 官方依据",text:logic.facts,
+      requirement:"逐条列出可核验的企业事实并绑定来源",
+      sufficient:()=>factLines.length>=3&&evidenceMarkers.length>=2,
+      basis:(status:string,len:number)=>status==="missing"?"该部分为空：回答将缺少事实支撑。"
+        :status==="partial"?`已有 ${factLines.length} 行事实${evidenceMarkers.length?`，来源标记 ${evidenceMarkers.length} 处（${evidenceMarkers.slice(0,3).join("、")}）`:"，但未检出可核验的来源标记"}；建议 ≥3 行事实且每行绑定来源。`
+        :`${factLines.length} 行事实、来源标记 ${evidenceMarkers.length} 处，可核验性较好。`},
+    {field:"boundaries" as const,label:"回答边界 / 禁止表达",text:logic.boundaries,
+      requirement:"写明禁止表达与适用前提",
+      sufficient:()=>logic.boundaries.trim().length>=50,
+      basis:(status:string,len:number)=>status==="missing"?"该部分为空：未设置回答边界，风险表述无约束。"
+        :status==="partial"?`已有 ${len} 字，边界约束较简略（建议 ≥50 字，逐条列出禁止表达与适用前提）。`
+        :`共 ${len} 字，已逐条写明禁止表达与适用前提。`},
+  ].map(({field,label,text,requirement,sufficient,basis})=>{
+    const len=text.trim().length;
+    const status=!text.trim()?"missing"as const:sufficient()?"covered"as const:"partial"as const;
+    const statusText=status==="covered"?"完整":status==="partial"?"部分覆盖":"缺失";
+    const situation=status==="missing"?`「${label}」缺失`:`「${label}」${statusText}`;
+    const suggestion=status==="missing"?`补写「${label}」：${requirement}。`
+      :status==="partial"?`继续完善「${label}」：${requirement}。`
+      :`「${label}」保持现状；接入真实 Judge 后再校验语义充分性。`;
+    return {field,label,status,statusText,situation,basis:basis(status,len),requirement,suggestion};
   });
 
   const subMetrics=[
@@ -106,8 +115,8 @@ export function createDemoEvaluation(input:{questionId:string;question:string;in
       issues:missing.slice(0,2).map(term=>`核心结论未显式回应问题关键词「${term}」，读者需要自行推断关联。`).concat(matched.length===0?["未检测到任何问题关键词进入结论，存在偏题风险。"]:[]),
       suggestions:["在结论首句直接回应问题主语与决策动作。","将「用户真实关心」中的在意点逐条映射到执行口径，避免答非所问。"],
       method:"关键词覆盖启发式（前端示例，非 Ragas / DeepEval 语义评估）"},
-    completeness:{score:score(coverage.reduce((sum,v)=>sum+(v.status==="covered"?100:v.status==="partial"?50:0),0)/5),
-      reason:`五项必要内容中 ${coverage.filter(v=>v.status==="covered").length} 项完整、${coverage.filter(v=>v.status==="partial").length} 项部分覆盖、${coverage.filter(v=>v.status==="missing").length} 项缺失；按 100/50/0 折算均值。`,coverage},
+    completeness:{score:score(coverage.reduce((sum,v)=>sum+(v.status==="covered"?100:v.status==="partial"?50:0),0)/4),
+      reason:`四项必要内容中 ${coverage.filter(v=>v.status==="covered").length} 项完整、${coverage.filter(v=>v.status==="partial").length} 项部分覆盖、${coverage.filter(v=>v.status==="missing").length} 项缺失；按 100/50/0 折算均值。`,coverage},
     actionability:{score:score(subMetrics.reduce((sum,v)=>sum+v.score,0)/3),
       reason:`三项子维度（具体度 ${subMetrics[0].score} / 证据指引 ${subMetrics[1].score} / 结构引导 ${subMetrics[2].score}）取平均；子项均针对文本形态判定。`,subMetrics},
     boundaryRisk:{score:riskScore,
