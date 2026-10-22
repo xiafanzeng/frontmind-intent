@@ -13,21 +13,36 @@ describe("Response Logic frontend-sample evaluation",()=>{
   expect(result.sourceFingerprint).toBe(fingerprintLogic(logic));
   expect(result.kind).toBe("sample-data");
  });
- it("returns four independent dimensions with rich per-dimension content and no aggregate",()=>{
+ it("returns four independent dimensions with rubric-based content and no aggregate",()=>{
   const result=createDemoEvaluation(input);
   expect(Object.keys(result.dimensions)).toEqual(["relevance","completeness","actionability","boundaryRisk"]);
-  expect(result.dimensions.completeness.coverage).toHaveLength(4);
-  expect(result.dimensions.completeness.coverage.map(i=>i.label)).toEqual(["用户真实关心","核心结论 / 执行口径","企业材料 / 官方依据","回答边界 / 禁止表达"]);
-  for(const item of result.dimensions.completeness.coverage){expect(item.situation.length).toBeGreaterThan(4);expect(item.basis.length).toBeGreaterThan(6);expect(item.suggestion.length).toBeGreaterThan(6);}
-  expect(result.dimensions.actionability.subMetrics).toHaveLength(3);
-  for(const item of result.dimensions.actionability.subMetrics){
-   expect(item.score).toBeGreaterThanOrEqual(0);expect(item.score).toBeLessThanOrEqual(100);
-   expect(item.reason.length).toBeGreaterThan(6);expect(item.suggestion.length).toBeGreaterThan(6);
-  }
-  expect(result.dimensions.relevance.issues.length + result.dimensions.relevance.reason.length).toBeGreaterThan(10);
-  expect(typeof result.dimensions.boundaryRisk.score).toBe("number");
-  expect(result.dimensions.boundaryRisk.risks.length).toBeGreaterThan(0);
   expect("overall" in result).toBe(false);
+  const rel=result.dimensions.relevance;
+  expect(rel.band.length).toBeGreaterThan(4);expect(rel.evidence.length).toBeGreaterThan(4);
+  expect(rel.effect.length).toBeGreaterThan(6);expect(rel.method).toContain("评分区间");
+  const cov=result.dimensions.completeness.coverage;
+  expect(cov.map(i=>i.label)).toEqual(["用户真实关心","核心结论 / 执行口径","企业材料 / 官方依据","回答边界 / 禁止表达"]);
+  for(const item of cov){expect(item.situation.length).toBeGreaterThan(4);expect(item.basis.length).toBeGreaterThan(6);expect(item.suggestion.length).toBeGreaterThan(6);}
+  const recomputedCompleteness=Math.round(cov.reduce((s,i)=>s+(i.status==="covered"?100:i.status==="partial"?50:0),0)/4);
+  expect(result.dimensions.completeness.score).toBe(recomputedCompleteness);
+  const subs=result.dimensions.actionability.subMetrics;
+  expect(subs.map(i=>i.key)).toEqual(["content_specificity","evidence_guidance","structure_guidance"]);
+  for(const sub of subs){expect(sub.score).toBeGreaterThanOrEqual(0);expect(sub.score).toBeLessThanOrEqual(100);
+   expect(sub.evidence.length).toBeGreaterThan(4);expect(sub.band.length).toBeGreaterThan(4);expect(sub.effect.length).toBeGreaterThan(6);}
+  expect(result.dimensions.actionability.score).toBe(Math.round(subs.reduce((s,i)=>s+i.score,0)/3));
+  const risks=result.dimensions.boundaryRisk.risks;
+  expect(risks).toHaveLength(6);
+  const riskLabels=["无依据排名","绝对化表达","缺乏依据的效果保证","未经核实的比较","缺少依据的事实性结论","缺失必要适用条件或限制"];
+  for(const label of riskLabels){expect(risks.some(r=>r.label===label)).toBe(true);}
+  const scored=risks.filter(r=>r.status==="controlled"||r.status==="partial"||r.status==="uncontrolled");
+  expect(result.dimensions.boundaryRisk.score).toBe(scored.length?Math.round(scored.reduce((s,r)=>s+(r.status==="controlled"?100:r.status==="partial"?50:0),0)/scored.length):null);
+  expect(result.dimensions.boundaryRisk.note).toContain("分母");
+ });
+ it("shows an unscorable boundary dimension instead of a default high score when nothing is scoreable",()=>{
+  const emptyBoundary=createDemoEvaluation({...input,logic:{...logic,boundaries:"",conclusion:"背景介绍：知识管理是企业的重要能力。"}});
+  expect(emptyBoundary.dimensions.boundaryRisk.score).not.toBeNull();
+  const noRiskNoBoundary=createDemoEvaluation({...input,logic:{concern:"用户关心如何选型",conclusion:"先明确需求，再列候选，最后按条件收敛。",facts:"",boundaries:"",}});
+  expect(noRiskNoBoundary.dimensions.boundaryRisk.risks.some(r=>r.status==="uncontrolled")).toBe(true);
  });
  it("is deterministic, does not mutate inputs and returns editable independent proposals",()=>{
   const before=JSON.stringify(input);
@@ -55,6 +70,7 @@ describe("Response Logic frontend-sample evaluation",()=>{
    expect(item.title.length).toBeGreaterThan(4);
    expect(item.reason.length).toBeGreaterThan(10);
    expect(item.suggestion.length).toBeGreaterThan(8);
+   expect(item.effect.length).toBeGreaterThan(6);
   }
   const ids=new Set(diagnoses.map(item=>item.id));
   expect(ids.size).toBe(diagnoses.length);

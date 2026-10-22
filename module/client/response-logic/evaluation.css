@@ -137,3 +137,4 @@
 /* 定位高亮：编辑区锚点在 .rl-eval-root 作用域之外，颜色使用字面量 */
 @keyframes rl-locate-pulse{0%{background-color:#f7f0fc;box-shadow:inset 0 0 0 2px #7545a0}100%{background-color:transparent;box-shadow:inset 0 0 0 2px transparent}}
 .rl-editor-field.rl-locate-flash{animation:rl-locate-pulse 1.6s ease-out 2;border-radius:10px}
+.rl-single-page .rl-eval-tag.neutral{color:#667085;background:#f2f4f7}
