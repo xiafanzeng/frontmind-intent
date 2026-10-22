@@ -15,7 +15,7 @@ export type ModuleShellProps = {
   /** Business workbenches already render the shared thin top bar. */
   showViewTabs?: boolean;
   preview?: boolean;
-  navigationModules?: readonly { id: string; label: string; color: string; views: readonly { id: string; label: string }[] }[];
+  navigationModules?: readonly { id: string; label: string; color: string; href?: string; views: readonly { id: string; label: string }[] }[];
   requestNavigation?: (action: () => void) => void;
 };
 const SIDEBAR_KEY = "frontmind.operator.sidebarCollapsed";
@@ -61,7 +61,7 @@ export function ModuleShell({ module, views, activeView, onSelectView, children,
   return <OperatorThemeProvider><ModulePresentationProvider module={presentation} requestNavigation={requestNavigation}>
     <DashboardFrame immersive={immersive} collapsed={(compact && !mobileOpen) || savedCollapsed} mobileOpen={mobileOpen} onMobileOpenChange={setMobileOpen}>
       <aside ref={sidebarRef} role={mobileOpen && compact ? "dialog" : undefined} aria-modal={mobileOpen && compact ? true : undefined} aria-hidden={phone && !mobileOpen ? true : undefined} inert={phone && !mobileOpen ? true : undefined} id="operator-project-navigation" className="global-nav operator-sidebar" aria-label="工作区导航" data-collapsed={collapsed} data-entry="project">
-        <OperatorModuleNavigation modules={(navigationModules ?? [{ ...module, views }]).map(item => ({ ...item, active: item.views.some(view => view.id === activeView) }))} onSelect={id => requestNavigation(() => select((navigationModules ?? [{ ...module, views }]).find(item => item.id === id)?.views[0]?.id ?? activeView))} />
+        <OperatorModuleNavigation modules={(navigationModules ?? [{ ...module, views }]).map(item => ({ ...item, active: item.views.some(view => view.id === activeView) }))} onSelect={id => requestNavigation(() => select((navigationModules ?? [{ ...module, views }]).find(item => item.id === id)?.views[0]?.id ?? activeView))} onNavigate={href => requestNavigation(() => window.location.assign(href))} />
         <div className="operator-sidebar-bottom"><StandaloneWorkspaceFooter collapsed={collapsed} onCollapse={collapse} workspaceLabel="FrontMind 开发工作区" accountLabel="FrontMind" /></div>
       </aside>
       <main className={`dashboard-main workbench-main ${immersive ? "knowledge-build-main" : ""}`}>
