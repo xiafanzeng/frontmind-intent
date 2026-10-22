@@ -1,3 +1,5 @@
 @import "../vendor/module-ui/src/styles/base.css";
 @source "../module/client";
 @source "../vendor/module-ui/src";
+/* 负责人要求：侧边栏模块选中态统一为灰色，覆盖各模块品牌色。 */
+.operator-sidebar .operator-module-entry.active { --module-accent: #5e6174 !important; }
