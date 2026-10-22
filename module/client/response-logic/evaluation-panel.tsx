@@ -23,6 +23,11 @@ function summarize(evaluation: DemoEvaluation){
   };
 }
 
+/** Dependency-free math typesetting: stacked fractions, italic serif variables, subscripts. */
+function Frac({num,den}:{num:ReactNode;den:ReactNode}){
+  return <span className="rl-math"><span className="rl-math-frac"><span className="rl-math-num">{num}</span><span className="rl-math-den">{den}</span></span></span>;
+}
+
 /** Stable per-dimension rule introductions; they never change with a single evaluation. */
 const EVALUATION_RULES:Record<string,ReactNode>={
   relevance:<>
@@ -33,19 +38,22 @@ const EVALUATION_RULES:Record<string,ReactNode>={
   </>,
   completeness:<>
     <p><b>评估目的</b>检查后续内容生成必需的四项内容是否覆盖：用户真实关心、核心结论 / 执行口径、企业材料 / 官方依据、回答边界 / 禁止表达。</p>
-    <p><b>判断标准</b>每项独立判定「完整」（100）、「部分覆盖」（50）或「缺失」（0）；Completeness = 四项均值，四舍五入。</p>
+    <p><b>判断标准</b>每项独立判定「完整」（100）、「部分覆盖」（50）或「缺失」（0）。</p>
+    <p><b>评分公式</b>Completeness = round( <Frac num={<><span className="rl-math-var">s</span><sub>1</sub> + <span className="rl-math-var">s</span><sub>2</sub> + <span className="rl-math-var">s</span><sub>3</sub> + <span className="rl-math-var">s</span><sub>4</sub></>} den="4"/> )，其中 <span className="rl-math-var">s</span><sub>i</sub> 为第 i 项必要内容的覆盖分（完整 = 100、部分覆盖 = 50、缺失 = 0），结果四舍五入为整数。</p>
     <p><b>不负责评价</b>内容是否具体可执行（归 Actionability）；结论是否切题（归 Answer Relevance）；边界约束是否足够针对风险（归 Boundary / Risk Control）。只判覆盖，不做质量重复扣分。</p>
   </>,
   actionability:<>
     <p><b>评估目的</b>判断后续 Content Agent 能否仅依据当前应答逻辑开展内容生成：明确写什么、依据什么、按什么顺序组织。</p>
     <p><b>三个子维度</b>内容具体度（是否给出信息点、步骤与判断条件，检出「突出优势」类笼统指令将扣分）；证据指引（事实与来源如何映射、缺据如何处理）；结构引导（展开顺序与段落组织要求）。</p>
-    <p><b>评分规则</b>每个子维度按 90/75/60/40/0 区间独立评分并附文本依据；Actionability = 三子项均值，四舍五入。</p>
+    <p><b>评分规则</b>每个子维度按 90/75/60/40/0 区间独立评分并附文本依据。</p>
+    <p><b>评分公式</b>Actionability = round( <Frac num={<><span className="rl-math-var">a</span><sub>1</sub> + <span className="rl-math-var">a</span><sub>2</sub> + <span className="rl-math-var">a</span><sub>3</sub></>} den="3"/> )，其中 <span className="rl-math-var">a</span><sub>i</sub> 为第 i 个子维度（内容具体度 / 证据指引 / 结构引导）的独立得分，取值 0–100，结果四舍五入为整数。</p>
     <p><b>不负责评价</b>内容完整不等同于可执行；覆盖齐全与否归 Completeness 单独评估。</p>
   </>,
   boundaryRisk:<>
     <p><b>评估目的</b>判断应答逻辑是否识别当前场景的风险，并明确规定哪些内容不能说、需核验或必须附带限制条件。</p>
     <p><b>重点检查</b>六类风险：无依据排名、绝对化表达、缺乏依据的效果保证、未经核实的比较、缺少依据的事实性结论、缺失必要适用条件。逐类区分「缺少事实依据」（正文问题）与「未明确设置回答边界」（约束缺失）。</p>
-    <p><b>评分规则</b>已明确控制 = 100、部分控制 = 50、发现风险但未控制 = 0；未检出 / 不适用 / 无法判断不计入分母。分母为 0 时显示「未评估」，绝不默认满分。</p>
+    <p><b>评分规则</b>每类适用风险独立判定：已明确控制 = 100、部分控制 = 50、发现风险但未控制 = 0。</p>
+    <p><b>评分公式</b>Boundary / Risk Control = round( <Frac num={<><span className="rl-math-op">Σ</span><sub><span className="rl-math-var">i</span>∈<span className="rl-math-var">D</span></sub> score(<span className="rl-math-var">i</span>)</>} den={<><span className="rl-math-op">|</span><span className="rl-math-var">D</span><span className="rl-math-op">|</span></>}/> )，其中 <span className="rl-math-var">D</span> 为计入评分的风险集合（已明确控制 / 部分控制 / 未控制）；「未检出 / 不适用 / 无法判断」∉ <span className="rl-math-var">D</span>、不计入分母。当 <span className="rl-math-op">|</span><span className="rl-math-var">D</span><span className="rl-math-op">|</span> = 0 时显示「未评估」，绝不默认满分。</p>
   </>,
 };
 
@@ -56,11 +64,11 @@ function DimensionCard({title,ruleKey,scoreValue,summary,detail,rules}:{title:st
     <p className="rl-eval-score-description">{summary}</p>
     <div className="rl-eval-tabs">
       <details className="rl-eval-tab" name={`eval-${ruleKey}`}>
-        <summary>查看详情 <span aria-hidden="true">⌄</span></summary>
+        <summary>查看详情<span className="rl-tab-chevron" aria-hidden="true">⌄</span></summary>
         <div className="rl-eval-detail-content">{detail}</div>
       </details>
       <details className="rl-eval-tab" name={`eval-${ruleKey}`}>
-        <summary>评估规则介绍 <span aria-hidden="true">⌄</span></summary>
+        <summary>评估规则介绍<span className="rl-tab-chevron" aria-hidden="true">⌄</span></summary>
         <div className="rl-eval-detail-content rl-eval-rules">{rules}</div>
       </details>
     </div>
