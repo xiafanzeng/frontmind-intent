@@ -95,10 +95,11 @@
 .rl-single-page .rl-eval-detail-heading{font-size:13px;font-weight:600;color:var(--iw-ink);margin:0 0 8px}
 
 /* 顶部两个入口按钮：同等视觉层级、统一紫色系（对齐优化问题按钮体系） */
-.rl-single-page .rl-eval-entry-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:7px 14px;border:1px solid var(--iw-purple);border-radius:8px;background:#fff;color:var(--iw-purple);font:inherit;font-weight:500;cursor:pointer}
-.rl-single-page .rl-eval-entry-button:hover{background:#faf7fc;border-color:var(--iw-purple)}
+/* 按钮位于 .rl-eval-root 作用域之外，颜色使用字面量（与 --iw-purple 同值） */
+.rl-single-page .rl-eval-entry-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:7px 14px;border:1px solid #7545a0;border-radius:8px;background:#fff;color:#7545a0;font:inherit;font-weight:500;cursor:pointer}
+.rl-single-page .rl-eval-entry-button:hover{background:#faf7fc;border-color:#7545a0}
 .rl-single-page .rl-eval-entry-button:disabled{opacity:.45;cursor:not-allowed}
-.rl-single-page .rl-eval-entry-button:focus-visible{outline:2px solid var(--iw-purple);outline-offset:3px}
+.rl-single-page .rl-eval-entry-button:focus-visible{outline:2px solid #7545a0;outline-offset:3px}
 /* Completeness 四项必要内容：纵向手风琴（无横向滚动） */
 .rl-single-page .rl-cov-item{border:1px solid var(--iw-line);border-radius:10px;background:#fff;margin-bottom:10px;min-width:0}
 .rl-single-page .rl-cov-item:last-child{margin-bottom:0}
