@@ -130,21 +130,21 @@ export function createDemoEvaluation(input:{questionId:string;question:string;in
   const orderMarkers=["首句","先","再","最后","分条","步骤","顺序","口径"].filter(marker=>logic.conclusion.includes(marker));
   const bandOf=(value:number)=>value>=90?"指令具体，基本可直接执行":value>=75?"整体可执行，少量细节待补":value>=60?"有方向但关键操作细节不足":value>=40?"以笼统建议为主，需自行推断":"几乎无可执行指令";
   const subMetrics=[
-    {key:"content_specificity" as const,label:"内容具体度（Content Specificity）",
+    {key:"content_specificity" as const,label:"内容具体度",
       raw:(numbered?80:55)-vagueHits.length*12+((/判断条件|标准|阈值/.test(logic.conclusion))?8:0),
       reason:`${numbered?"执行口径包含编号步骤（可直接执行的主干）":"执行口径未采用编号步骤"}${vagueHits.length?`；检出 ${vagueHits.length} 处笼统指令`:"；未检出「突出优势/详细介绍」类笼统指令"}。`,
       evidence:vagueHits[0]?`「…${vagueHits[0].excerpt}…」`:(numbered?`编号步骤示例：${conclusionSentences.find(s=>/\d|[①②③]/.test(s))?.slice(0,30)??firstSentence.slice(0,30)}…`:`结论开头：「${firstSentence.slice(0,30)}…」`),
       issue:vagueHits.length?"笼统指令无法直接转化为写作动作。":"缺少编号步骤时，后续 Agent 需自行拆解动作。",
       suggestion:vagueHits.length?`替换笼统指令为「信息点 + 动作 + 判断条件」，例如把「突出优势」改为「列出 3 项可核验优势并各配一条来源」。`:"将执行口径改写为编号步骤，每步含可操作动作与判断条件。",
       effect:"修改后每条指令都能对应到具体段落与素材，无需二次解释。"},
-    {key:"evidence_guidance" as const,label:"证据指引（Evidence Guidance）",
+    {key:"evidence_guidance" as const,label:"证据指引",
       raw:40+Math.min(45,evidenceMarkers.length*15)+(mappingWords.length?12:0)+(missingHandle?15:0),
       reason:`来源标记 ${evidenceMarkers.length} 处${evidenceMarkers.length?`（${evidenceMarkers.slice(0,3).join("、")}）`:""}${mappingWords.length?`；有事实↔证据映射用语（${mappingWords.slice(0,2).join("、")}）`:"；未检出事实与证据的映射要求"}${missingHandle?"；说明了缺依据时的处理方式":"；未说明缺少依据时如何处理"}。`,
       evidence:evidenceMarkers[0]?`「…${excerptAround(logic.facts,logic.facts.indexOf(evidenceMarkers[0]),20)}…」`:`依据栏开头：「${logic.facts.slice(0, 30)}…」`,
       issue:evidenceMarkers.length<2?"后续 Agent 无法确定每条事实应引用哪份材料。":"映射关系已可追溯，但缺据处理仍可补充。",
       suggestion:"为每条事实标注来源（知识库文档/官网/授权文件/项目记录），并写明「无法核验的表述不作为依据」。",
       effect:"修改后每条事实都能定位到可核验来源，缺据内容会被显式降级处理。"},
-    {key:"structure_guidance" as const,label:"结构引导（Structure Guidance）",
+    {key:"structure_guidance" as const,label:"结构引导",
       raw:40+Math.min(48,orderMarkers.length*12)+(numbered?15:0),
       reason:`展开顺序信号 ${orderMarkers.length} 个${orderMarkers.length?`（${orderMarkers.slice(0,4).join("、")}）`:"（未检出「首句/分条/顺序」类信号）"}${numbered?"；编号步骤提供了执行顺序":""}。`,
       evidence:orderMarkers[0]?`「…${excerptAround(logic.conclusion,logic.conclusion.indexOf(orderMarkers[0]),20)}…」`:`结论开头：「${firstSentence.slice(0,30)}…」`,
@@ -190,7 +190,7 @@ export function createDemoEvaluation(input:{questionId:string;question:string;in
 
   return {kind:"sample-data" as const,...input,sourceFingerprint:fingerprintLogic(logic),dimensions:{
     relevance:{score:relevanceScore,band:relevanceBandLabel,
-      reason:`关键词覆盖 ${matchedTerms.length}/${questionTerms.length}${missingTerms.length?`（缺失：${missingTerms.slice(0,2).join("、")}）`:""}，结论首句${firstSentenceDirect?"有":"没有"}直接回应，意图贯穿度 ${Math.round(intentEcho*100)}% → 评分区间「${relevanceBandLabel}」。本维度只评估是否回应 Question/Intent；组成部分齐全度归 Completeness，指令具体度归 Actionability，无依据承诺归 Boundary。`,
+      reason:`关键词覆盖 ${matchedTerms.length}/${questionTerms.length}${missingTerms.length?`（缺失：${missingTerms.slice(0,2).join("、")}）`:""}，结论首句${firstSentenceDirect?"有":"没有"}直接回应，意图贯穿度 ${Math.round(intentEcho*100)}% → 评分区间「${relevanceBandLabel}」。本维度只评估是否回应 Question/Intent；组成部分齐全度归「完整性」，指令具体度归「可执行性」，无依据承诺归「边界与风险控制」。`,
       evidence:`结论首句：「${firstSentence.slice(0,40)||"（空）"}…」`,
       issues:relevanceIssues,
       suggestions:["在结论首句直接回应问题主语与决策动作。","将「用户真实关心」中的在意点逐条映射到执行口径。"],
@@ -215,22 +215,22 @@ export function createDemoOptimization(logic:LogicSections,context?:{question:st
     let after=before.trim();let reason="";let resolvedIssues:string[]=[];const remainingIssues:string[]=[];
     if(field==="concern"){
       after=[after||"（原文为空）",`决策场景：${intent||"围绕当前问题的决策疑问"}`,`在意点：\n1. 选型条件与适用范围\n2. 评价维度是否可核验\n3. 结论的适用前提与限制`].join("\n\n");
-      reason="将意图转写为具体决策场景与在意点清单，使后续结论逐条对应（改善 Answer Relevance 的关键词覆盖）。";
+      reason="将意图转写为具体决策场景与在意点清单，使后续结论逐条对应（改善「回答相关性」的关键词覆盖）。";
       resolvedIssues=["用户在意点未显式列出","结论与「用户真实关心」的映射缺失"];
       remainingIssues.push("在意点需与真实用户反馈核对后定稿。");
     }else if(field==="conclusion"){
       after=[after||"（原文为空）",`执行口径（建议采用编号步骤）：\n1. 首句直接回应问题主语与决策动作${questionTerms.length?`（${questionTerms.slice(0,2).join("、")}）`:""}；\n2. 按样本范围、评价维度、信息时间三项标准核对外部榜单；\n3. 给出分类型候选清单与选择建议；\n4. 以适用条件与限制收束，允许读者回溯依据。`].join("\n\n");
-      reason="把执行口径改写为编号步骤，补齐「判断条件 + 动作 + 依据」要素（改善 Actionability 的内容具体度与结构引导）。";
+      reason="把执行口径改写为编号步骤，补齐「判断条件 + 动作 + 依据」要素（改善「可执行性」的内容具体度与结构引导）。";
       resolvedIssues=["结论缺少编号步骤","结构信号不足"];
       remainingIssues.push("步骤中的判断阈值需结合业务口径确认。");
     }else if(field==="facts"){
       after=[after||"（原文为空）",`来源绑定建议：\n- 每条事实行末标注（知识库文档 / 官网 / 授权文件 / 项目记录）；\n- 无法绑定来源的表述移入「回答边界」作为限制说明。`].join("\n\n");
-      reason="为事实清单增加逐条来源绑定规则，补齐 Evidence 覆盖项（改善 Completeness 的证据与来源子项）。";
+      reason="为事实清单增加逐条来源绑定规则，补齐证据覆盖项（改善「完整性」的企业材料与官方依据覆盖）。";
       resolvedIssues=["证据缺少来源标记"];
       remainingIssues.push("来源清单需与知识库实际文档核对。");
     }else{
       after=[after||"（原文为空）",`禁止与谨慎表达清单：\n1. 无依据排名：仅在有样本范围、评价维度与信息时间时使用排名表述；\n2. 绝对化承诺：不用「唯一/绝对领先/保证收录」类表述；\n3. 未经核实的比较：竞品对比必须并列比较条件与数据来源；\n4. 价格与周期：注明适用前提，以最终确认文件为准。`].join("\n\n");
-      reason="将边界整理为逐条禁止/谨慎清单，与风险扫描的六类风险一一对应（改善 Boundary / Risk Control 的未受控项）。";
+      reason="将边界整理为逐条禁止/谨慎清单，与风险扫描的六类风险一一对应（改善「边界与风险控制」的未受控项）。";
       resolvedIssues=["未设置回答边界（部分风险无对应约束）"];
       remainingIssues.push("清单需法务/业务复核后作为正式口径。");
     }
@@ -256,8 +256,8 @@ export type DiagnosisItem = {
   effect: string;
 };
 const DIMENSION_LABELS: Record<DiagnosisDimension, string> = {
-  relevance: "Answer Relevance", completeness: "Completeness",
-  actionability: "Actionability", boundaryRisk: "Boundary / Risk Control",
+  relevance: "回答相关性", completeness: "完整性",
+  actionability: "可执行性", boundaryRisk: "边界与风险控制",
 };
 /**
  * Derive the actionable diagnosis list from one demo evaluation. Pure and
@@ -295,7 +295,7 @@ export function buildDiagnosis(evaluation: DemoEvaluation): DiagnosisItem[] {
       excerpt: logic[item.field].slice(0, 80),
       targetField: item.field, targetLabel: item.label,
       suggestion: item.suggestion,
-      effect: `补齐后该项按完整（100）计入 Completeness，当前 ${(dimensions.completeness.score)} 分将相应提升。`,
+      effect: `补齐后该项按完整（100）计入「完整性」，当前 ${(dimensions.completeness.score)} 分将相应提升。`,
     });
   }
   const lowSub = dimensions.actionability.subMetrics.filter(sub => sub.score < 80);
@@ -323,7 +323,7 @@ export function buildDiagnosis(evaluation: DemoEvaluation): DiagnosisItem[] {
       excerpt: logic.boundaries.slice(0, 80),
       targetField: "boundaries", targetLabel: "回答边界 / 禁止表达",
       suggestion: `在回答边界中逐条补充：${uncontrolled.map(risk => risk.guidance).join("；")}。`,
-      effect: "补齐后对应风险按「已明确控制」计入分母，Boundary / Risk Control 分数按分母重算；未检出的类别仍不会因此记满分。",
+      effect: "补齐后对应风险按「已明确控制」计入分母，「边界与风险控制」分数按分母重算；未检出的类别仍不会因此记满分。",
     });
   }
   return items.slice(0, 6);

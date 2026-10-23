@@ -33,27 +33,33 @@ const EVALUATION_RULES:Record<string,ReactNode>={
   relevance:<>
     <p><b>评估目的</b>判断应答逻辑是否直接回应当前 Question 和 Intent。</p>
     <p><b>重点检查</b>是否回答核心问题；是否识别用户真正关心的决策内容；是否围绕当前 Intent 展开而非泛泛介绍；是否存在偏题或回避问题。</p>
-    <p><b>不负责评价</b>必要组成部分是否齐全（归 Completeness）；执行指引是否具体（归 Actionability）；风险边界是否充分（归 Boundary / Risk Control）。</p>
+    <p><b>不负责评价</b>必要组成部分是否齐全（归「完整性」）；执行指引是否具体（归「可执行性」）；风险边界是否充分（归「边界与风险控制」）。</p>
     <p><b>评分规则</b>五档区间：90–100 直接回应；75–89 整体相关；60–74 部分回应；40–59 以背景为主；0–39 明显偏题。区间内按结论首句回应、意图贯穿等结构信号微调。</p>
   </>,
   completeness:<>
     <p><b>评估目的</b>检查后续内容生成必需的四项内容是否覆盖：用户真实关心、核心结论 / 执行口径、企业材料 / 官方依据、回答边界 / 禁止表达。</p>
     <p><b>判断标准</b>每项独立判定「完整」（100）、「部分覆盖」（50）或「缺失」（0）。</p>
-    <p><b>评分公式</b>Completeness = round( <Frac num={<><span className="rl-math-var">s</span><sub>1</sub> + <span className="rl-math-var">s</span><sub>2</sub> + <span className="rl-math-var">s</span><sub>3</sub> + <span className="rl-math-var">s</span><sub>4</sub></>} den="4"/> )，其中 <span className="rl-math-var">s</span><sub>i</sub> 为第 i 项必要内容的覆盖分（完整 = 100、部分覆盖 = 50、缺失 = 0），结果四舍五入为整数。</p>
-    <p><b>不负责评价</b>内容是否具体可执行（归 Actionability）；结论是否切题（归 Answer Relevance）；边界约束是否足够针对风险（归 Boundary / Risk Control）。只判覆盖，不做质量重复扣分。</p>
+    <p><b>评分公式</b></p>
+    <div className="rl-math-block"><span className="rl-math-name">完整性</span><span className="rl-math-eq">=</span><span className="rl-math-fn">round</span><span className="rl-math-paren">(</span><Frac num={<><span className="rl-math-var">s</span><sub>1</sub> + <span className="rl-math-var">s</span><sub>2</sub> + <span className="rl-math-var">s</span><sub>3</sub> + <span className="rl-math-var">s</span><sub>4</sub></>} den="4"/><span className="rl-math-paren">)</span></div>
+    <p className="rl-math-note">其中 <span className="rl-math-var">s</span><sub>i</sub> 为第 i 项必要内容的覆盖分（完整 = 100、部分覆盖 = 50、缺失 = 0），结果四舍五入为整数。</p>
+    <p><b>不负责评价</b>内容是否具体可执行（归「可执行性」）；结论是否切题（归「回答相关性」）；边界约束是否足够针对风险（归「边界与风险控制」）。只判覆盖，不做质量重复扣分。</p>
   </>,
   actionability:<>
     <p><b>评估目的</b>判断后续 Content Agent 能否仅依据当前应答逻辑开展内容生成：明确写什么、依据什么、按什么顺序组织。</p>
     <p><b>三个子维度</b>内容具体度（是否给出信息点、步骤与判断条件，检出「突出优势」类笼统指令将扣分）；证据指引（事实与来源如何映射、缺据如何处理）；结构引导（展开顺序与段落组织要求）。</p>
     <p><b>评分规则</b>每个子维度按 90/75/60/40/0 区间独立评分并附文本依据。</p>
-    <p><b>评分公式</b>Actionability = round( <Frac num={<><span className="rl-math-var">a</span><sub>1</sub> + <span className="rl-math-var">a</span><sub>2</sub> + <span className="rl-math-var">a</span><sub>3</sub></>} den="3"/> )，其中 <span className="rl-math-var">a</span><sub>i</sub> 为第 i 个子维度（内容具体度 / 证据指引 / 结构引导）的独立得分，取值 0–100，结果四舍五入为整数。</p>
-    <p><b>不负责评价</b>内容完整不等同于可执行；覆盖齐全与否归 Completeness 单独评估。</p>
+    <p><b>评分公式</b></p>
+    <div className="rl-math-block"><span className="rl-math-name">可执行性</span><span className="rl-math-eq">=</span><span className="rl-math-fn">round</span><span className="rl-math-paren">(</span><Frac num={<><span className="rl-math-var">a</span><sub>1</sub> + <span className="rl-math-var">a</span><sub>2</sub> + <span className="rl-math-var">a</span><sub>3</sub></>} den="3"/><span className="rl-math-paren">)</span></div>
+    <p className="rl-math-note">其中 <span className="rl-math-var">a</span><sub>i</sub> 为第 i 个子维度（内容具体度 / 证据指引 / 结构引导）的独立得分，取值 0–100，结果四舍五入为整数。</p>
+    <p><b>不负责评价</b>内容完整不等同于可执行；覆盖齐全与否归「完整性」单独评估。</p>
   </>,
   boundaryRisk:<>
     <p><b>评估目的</b>判断应答逻辑是否识别当前场景的风险，并明确规定哪些内容不能说、需核验或必须附带限制条件。</p>
     <p><b>重点检查</b>六类风险：无依据排名、绝对化表达、缺乏依据的效果保证、未经核实的比较、缺少依据的事实性结论、缺失必要适用条件。逐类区分「缺少事实依据」（正文问题）与「未明确设置回答边界」（约束缺失）。</p>
     <p><b>评分规则</b>每类适用风险独立判定：已明确控制 = 100、部分控制 = 50、发现风险但未控制 = 0。</p>
-    <p><b>评分公式</b>Boundary / Risk Control = round( <Frac num={<><span className="rl-math-op">Σ</span><sub><span className="rl-math-var">i</span>∈<span className="rl-math-var">D</span></sub> score(<span className="rl-math-var">i</span>)</>} den={<><span className="rl-math-op">|</span><span className="rl-math-var">D</span><span className="rl-math-op">|</span></>}/> )，其中 <span className="rl-math-var">D</span> 为计入评分的风险集合（已明确控制 / 部分控制 / 未控制）；「未检出 / 不适用 / 无法判断」∉ <span className="rl-math-var">D</span>、不计入分母。当 <span className="rl-math-op">|</span><span className="rl-math-var">D</span><span className="rl-math-op">|</span> = 0 时显示「未评估」，绝不默认满分。</p>
+    <p><b>评分公式</b></p>
+    <div className="rl-math-block"><span className="rl-math-name">边界与风险控制</span><span className="rl-math-eq">=</span><span className="rl-math-fn">round</span><span className="rl-math-paren">(</span><Frac num={<><span className="rl-math-op">Σ</span><sub><span className="rl-math-var">i</span>∈<span className="rl-math-var">D</span></sub> <span className="rl-math-fn">score</span>(<span className="rl-math-var">i</span>)</>} den={<><span className="rl-math-op">|</span><span className="rl-math-var">D</span><span className="rl-math-op">|</span></>}/><span className="rl-math-paren">)</span></div>
+    <p className="rl-math-note">其中 <span className="rl-math-var">D</span> 为计入评分的风险集合（已明确控制 / 部分控制 / 未控制）；「未检出 / 不适用 / 无法判断」∉ <span className="rl-math-var">D</span>、不计入分母。当 <span className="rl-math-op">|</span><span className="rl-math-var">D</span><span className="rl-math-op">|</span> = 0 时显示「未评估」，绝不默认满分。</p>
   </>,
 };
 
@@ -92,22 +98,21 @@ export function ResponseLogicEvaluationPanel({evaluation,onBack,onOptimize,onLoc
     <div className="rl-eval-layout">
       <div className="rl-eval-main">
         <div className="rl-eval-grid">
-          <DimensionCard title="Answer Relevance" ruleKey="relevance" scoreValue={dimensions.relevance.score} summary={summary.relevance}
+          <DimensionCard title="回答相关性" ruleKey="relevance" scoreValue={dimensions.relevance.score} summary={summary.relevance}
             detail={<>
               <ul className="rl-eval-issues">{dimensions.relevance.issues.map((x,i)=><li key={i}>{x}</li>)}</ul>
               <p><b>原文依据</b>{dimensions.relevance.evidence}</p>
               <p><b>修改建议</b>{dimensions.relevance.suggestions.join("；")}</p>
               <p><b>修改后预期</b>{dimensions.relevance.effect}</p>
-              <p className="rl-eval-submethod">{dimensions.relevance.method}</p>
             </>}
             rules={EVALUATION_RULES.relevance}/>
-          <DimensionCard title="Completeness" ruleKey="completeness" scoreValue={dimensions.completeness.score} summary={summary.completeness}
+          <DimensionCard title="完整性" ruleKey="completeness" scoreValue={dimensions.completeness.score} summary={summary.completeness}
             detail={<div className="rl-cov-list">{dimensions.completeness.coverage.map(item=><details className="rl-cov-item" key={item.field} open={item.status!=="covered"}><summary><b>{item.label}</b><span className={`rl-eval-tag ${item.status}`}>{item.statusText}</span><span className="rl-cov-chevron" aria-hidden="true">⌄</span></summary><div className="rl-cov-body"><p><b>覆盖情况</b>{item.situation}</p><p><b>判断依据</b>{item.basis}</p><p><b>修改建议</b>{item.suggestion}</p></div></details>)}</div>}
             rules={EVALUATION_RULES.completeness}/>
-          <DimensionCard title="Actionability" ruleKey="actionability" scoreValue={dimensions.actionability.score} summary={summary.actionability}
-            detail={dimensions.actionability.subMetrics.map(item=><div className="rl-eval-submetric" key={item.key}><div className="rl-eval-submetric-head"><b>{item.label}</b><span>{item.score} / 100 · {item.band}</span></div><p>{item.reason}</p><p className="rl-eval-evidence">文本依据：{item.evidence}</p><small>问题：{item.issue}</small><small>建议：{item.suggestion}</small><small>修改后预期：{item.effect}</small></div>)}
+          <DimensionCard title="可执行性" ruleKey="actionability" scoreValue={dimensions.actionability.score} summary={summary.actionability}
+            detail={<div className="rl-cov-list">{dimensions.actionability.subMetrics.map(item=><details className="rl-cov-item rl-sub-item" name="eval-actionability-sub" key={item.key}><summary><b>{item.label}</b><span className="rl-eval-tag neutral">{item.score} / 100</span><span className={`rl-eval-tag ${item.score>=80?"supported":item.score>=50?"partial":"missing"}`}>{item.band}</span><span className="rl-cov-chevron" aria-hidden="true">⌄</span></summary><div className="rl-cov-body"><p>{item.reason}</p><p><b>原文依据</b><span className="rl-eval-evidence">{item.evidence}</span></p><p><b>问题</b>{item.issue}</p><p><b>修改建议</b>{item.suggestion}</p><p><b>修改后预期</b>{item.effect}</p></div></details>)}</div>}
             rules={EVALUATION_RULES.actionability}/>
-          <DimensionCard title="Boundary / Risk Control" ruleKey="boundary" scoreValue={dimensions.boundaryRisk.score} summary={summary.boundaryRisk}
+          <DimensionCard title="边界与风险控制" ruleKey="boundary" scoreValue={dimensions.boundaryRisk.score} summary={summary.boundaryRisk}
             detail={<>
               {dimensions.boundaryRisk.risks.map(risk=><div className="rl-eval-risk" key={risk.key}><b>{risk.label}</b><span className={`rl-eval-tag ${risk.status==="controlled"?"supported":risk.status==="partial"?"partial":risk.status==="uncontrolled"?"missing":"neutral"}`}>{risk.statusText}</span>{risk.excerpt&&<p className="rl-eval-evidence">原文片段：…{risk.excerpt}…</p>}<p>{risk.guidance}</p></div>)}
               <p className="rl-eval-submethod">计分口径：{dimensions.boundaryRisk.note}</p>
