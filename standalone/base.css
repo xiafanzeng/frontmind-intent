@@ -1,5 +1,3 @@
 @import "../vendor/module-ui/src/styles/base.css";
 @source "../module/client";
 @source "../vendor/module-ui/src";
-/* 侧边栏模块选中态统一使用 FrontMind 品牌紫，覆盖各模块品牌色。 */
-.operator-sidebar .operator-module-entry.active { --module-accent: #491060 !important; }
