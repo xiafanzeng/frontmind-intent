@@ -86,7 +86,7 @@ describe("Response Logic frontend-sample evaluation",()=>{
  });
  it("renders four metric cards, matrix and one concise data-source note (no demo banner)",()=>{
   const markup=renderToStaticMarkup(createElement(ResponseLogicEvaluationPanel,{evaluation:createDemoEvaluation(input),onBack:()=>{},onOptimize:()=>{}}));
-  for(const title of ["Answer Relevance","Completeness","Actionability","Boundary / Risk Control"]){expect(markup).toContain(title);}
+  for(const title of ["回答相关性","完整性","可执行性","边界与风险控制"]){expect(markup).toContain(title);}
   expect(markup).toContain("rl-eval-layout");
   expect(markup).toContain("rl-eval-diagnosis");
   expect((markup.match(/rl-cov-item/g)||[]).length).toBeGreaterThanOrEqual(4);
