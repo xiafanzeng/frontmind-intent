@@ -21,11 +21,26 @@ import {
 } from "../contracts/response-logic.js";
 import type { Request } from "express";
 import type { CoreProviderError, CoreRequest, CredentialHandle, ManusV2MessageEvent, ResponseLogicApiPorts } from "./task-ports.js";
+import { createResponseLogicEvaluationRouter } from "./response-logic-evaluation-api.js";
+import { createResponseLogicEvaluationStore } from "./response-logic-evaluation-store.js";
 /** Business routes, evidence assembly, task binding, adoption and recovery live in the module.
  * The host only supplies identity, transactional repositories and generic execution/file services. */
 export function createResponseLogicApi(core: ResponseLogicApiPorts) {
  const { projectGeneralExecution, generalExecutionActivity, orderExecutionTimeline, projectBusinessExecution, enterpriseWorkspaceUserId, getEnterpriseProjectScope, enterpriseAccountOwnerPredicate, sendAiBillingError, localAssets, providerFileLeases, getCredentialForUpstreamResource, recordUpstreamResource, createCredentialAgentClient, fileResourceContentExpiry, isFileResourceContentExpired, getDashboardQuestion, getLatestKnowledgeSnapshot, getFrontMindCredentials, getUpstreamBaseUrl, toUpstreamAgentProfile, ResponseLogicConfirmedError, ResponseLogicProviderReadinessError, ResponseLogicPublicationRequestConflictError, ResponseLogicResultAdoptionError, ResponseLogicRevisionConflictError, ResponseLogicTaskActiveError, ResponseLogicTaskSupersededError, adoptResponseLogicModelResult, assertResponseLogicRecordEditable, getResponseLogicEntry, recordResponseLogicTaskStart, releaseResponseLogicTaskBinding, requireResponseLogicProviderReadiness, updateResponseLogicDraftMaterials, assertServiceCapability, ServiceEntitlementError, redactSensitivePayload, redactSensitiveText, safeErrorForLog, buildDeterministicTaskAttachmentArchive, assertUpstreamPromptBudget, getDb, readStoredPresalesFile, classifyManusV2StructuredResultEnvelope, latestManusV2TaskState, ManusV2ApiError, manusV2EventOperationToken, orderManusV2EventsByProviderRank } = core;
 const router: import("express").Router = Router();
+
+// Server-side rule evaluation shares the /api/response-logic mount, so no host
+// change is needed. Its store degrades honestly (persisted:false / 503) until
+// the Core migration creating response_logic_evaluations is deployed.
+router.use("/evaluation", createResponseLogicEvaluationRouter({
+  enterpriseWorkspaceUserId: core.enterpriseWorkspaceUserId,
+  assertServiceCapability: core.assertServiceCapability,
+  ServiceEntitlementError: core.ServiceEntitlementError,
+  sendAiBillingError: core.sendAiBillingError,
+  getDashboardQuestion: core.getDashboardQuestion,
+  getResponseLogicEntry: core.getResponseLogicEntry,
+  evaluationStore: createResponseLogicEvaluationStore({ getDb: core.getDb }),
+}));
 
 function responseLogicPublicExecution(taskId: string, events: readonly ManusV2MessageEvent[]) {
   let turn = 0;

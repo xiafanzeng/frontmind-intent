@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { boolean, index, int, json, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar, type AnyMySqlColumn } from "drizzle-orm/mysql-core";
 import type { ConfirmedResponseLogic, ResponseLogicAppliedModelResult, ResponseLogicDraft, ResponseLogicPublicationMutation } from "../contracts/response-logic.js";
+import type { ResponseLogicRuleEvaluation } from "../contracts/response-logic-evaluation.js";
 export type WorkspaceQuestionEvidenceRecord = { documentPath: string; excerpt: string; relevance: string };
 export interface IntentSchemaCore {
   users: { id: AnyMySqlColumn };
@@ -298,6 +299,38 @@ const enterpriseProjectQuestions = mysqlTable(
     ),
   ],
 );
-return { workspaceQuestions, responseLogicEntries, enterpriseProjectQuestions };
+/**
+ * One persisted server-side rule evaluation of a response-logic record. The
+ * module owns this definition; the physical CREATE TABLE lands through the
+ * Core drizzle migration flow (module definitions feed Core's schema.ts).
+ * Until that migration is deployed, the evaluation API degrades honestly via
+ * its persistence-unavailable state instead of pretending to store results.
+ */
+const responseLogicEvaluations = mysqlTable(
+  "response_logic_evaluations",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    userId: int("userId")
+      .notNull()
+      .references(() => core.users.id, { onDelete: "cascade" }),
+    questionId: varchar("questionId", { length: 191 }).notNull(),
+    recordRevision: int("recordRevision", { unsigned: true }).notNull(),
+    confirmedVersion: int("confirmedVersion"),
+    sourceFingerprint: varchar("sourceFingerprint", { length: 64 }).notNull(),
+    ruleVersion: varchar("ruleVersion", { length: 32 }).notNull(),
+    evaluation: json("evaluation").$type<ResponseLogicRuleEvaluation>().notNull(),
+    status: mysqlEnum("status", ["completed", "failed"]).default("completed").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => [
+    index("response_logic_evaluations_user_question_idx").on(
+      table.userId,
+      table.questionId,
+      table.createdAt,
+    ),
+  ],
+);
+
+return { workspaceQuestions, responseLogicEntries, responseLogicEvaluations, enterpriseProjectQuestions };
 }
 export type IntentSchema = ReturnType<typeof createIntentSchema>;
