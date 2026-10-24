@@ -63,12 +63,23 @@ export interface ResponseLogicEvaluationStore {
   getLatest(userId: number, questionId: string): Promise<RuleEvaluationStoreResult<StoredResponseLogicRuleEvaluation | null>>;
 }
 
-function isMissingTableError(error: unknown) {
-  const candidate = error as { code?: unknown; errno?: unknown } | null;
-  return (
-    candidate?.code === "ER_NO_SUCH_TABLE" ||
-    candidate?.errno === 1146
-  );
+/**
+ * Detect a MySQL "table does not exist" error, unwrapping Drizzle ORM's
+ * DrizzleQueryError which stores the original driver error in .cause.
+ * Only ER_NO_SUCH_TABLE / errno 1146 counts as missing-table; connection
+ * failures, permission errors, timeouts and every other database error are
+ * NOT downgraded and must surface as real failures.
+ */
+export function isMissingTableError(error: unknown): boolean {
+  const seen = new Set<unknown>();
+  let candidate: unknown = error;
+  while (typeof candidate === "object" && candidate !== null && !seen.has(candidate)) {
+    seen.add(candidate);
+    const c = candidate as { code?: unknown; errno?: unknown; cause?: unknown };
+    if (c.code === "ER_NO_SUCH_TABLE" || c.errno === 1146) return true;
+    candidate = c.cause;
+  }
+  return false;
 }
 
 /**
