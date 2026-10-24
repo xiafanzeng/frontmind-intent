@@ -81,8 +81,8 @@ function DimensionCard({title,ruleKey,scoreValue,summary,detail,rules}:{title:st
   </WorkbenchCard>;
 }
 
-/** Presentation counterpart to brand IntentWorkbench's iw-evaluation. Data is frontend sample data; the diagnosis method area states this. */
-export function ResponseLogicEvaluationPanel({evaluation,onBack,onOptimize,onLocate}:{evaluation:DemoEvaluation;onBack:()=>void;onOptimize:()=>void;onLocate?:(field:LogicField)=>void}){
+/** Presentation counterpart to brand IntentWorkbench's iw-evaluation. The diagnosis method area states the data source honestly; live callers pass the server label, preview keeps the local-sample default. */
+export function ResponseLogicEvaluationPanel({evaluation,dataSourceLabel,onBack,onOptimize,onLocate}:{evaluation:DemoEvaluation;dataSourceLabel?:string;onBack:()=>void;onOptimize:()=>void;onLocate?:(field:LogicField)=>void}){
   const {dimensions}=evaluation;
   const [expandedId,setExpandedId]=useState<string|null>(null);
   const diagnoses=useMemo(()=>buildDiagnosis(evaluation),[evaluation]);
@@ -132,7 +132,7 @@ export function ResponseLogicEvaluationPanel({evaluation,onBack,onOptimize,onLoc
             <button type="button" className="rl-dx-locate" onClick={()=>onLocate?.(item.targetField)}>定位到对应内容 →</button>
           </div>
         </details>)}</div>:<p className="rl-dx-empty">当前四项检查未发现待处理问题。</p>}
-        <div className="rl-eval-diagnosis-method">数据来源：前端示例数据（基于当前文本的规则展示，未接入真实 Judge / Ragas / DeepEval）<br/>Question ID：{evaluation.questionId}<br/>对应版本：{evaluation.version===null?"未发布":`v${evaluation.version}`} · Revision {evaluation.revision} · 内容指纹已绑定，版本变化后需重新评估</div></aside>
+        <div className="rl-eval-diagnosis-method">数据来源：{dataSourceLabel ?? "本地预览示例数据（基于当前文本的规则展示，未接入真实 Judge / Ragas / DeepEval）"}<br/>Question ID：{evaluation.questionId}<br/>对应版本：{evaluation.version===null?"未发布":`v${evaluation.version}`} · Revision {evaluation.revision} · 内容指纹已绑定，版本变化后需重新评估</div></aside>
     </div>
     <div className="rl-eval-actions"><span>优化建议需人工审核后采用；采用为本地预览状态，不写入服务器。</span><button type="button" className="rl-eval-outline" onClick={onBack}>返回详情</button><button type="button" className="rl-eval-primary" onClick={onOptimize}>生成优化方案 →</button></div>
   </section>;

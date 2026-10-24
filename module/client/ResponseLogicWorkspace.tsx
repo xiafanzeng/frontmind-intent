@@ -54,6 +54,7 @@ import "./response-logic-workspace.css";
 import {ResponseLogicEvaluationPanel} from "./response-logic/evaluation-panel.js";
 import {ResponseLogicOptimizationWorkflow} from "./response-logic/optimization-workflow.js";
 import {createDemoEvaluation, fingerprintLogic, type LogicField, type LogicSections} from "./response-logic/mock-evaluation.js";
+import {resolveResponseLogicRuleEvaluation, type ResponseLogicRuleEvaluation} from "./response-logic-evaluation-client.js";
 import {
   parseResponseLogicReply as parseResponseLogicReplyCore,
   getResponseLogicPollDelay as getResponseLogicPollDelayCore,
@@ -1226,6 +1227,9 @@ function ResponseLogicQuestionEditor({
   const startLock = useRef(false);
   const [demoView, setDemoView] = useState<"detail"|"evaluation"|"optimize">("detail");
   const [demoEvaluation, setDemoEvaluation] = useState<ReturnType<typeof createDemoEvaluation>|null>(null);
+  const [evaluationPending, setEvaluationPending] = useState(false);
+  const [evaluationError, setEvaluationError] = useState("");
+  const [evaluationPersisted, setEvaluationPersisted] = useState<boolean | null>(null);
 
   const persistedRecord = persistence.records?.find(
     (record) => record.questionId === questionId,
@@ -1802,9 +1806,31 @@ function ResponseLogicQuestionEditor({
   const currentFingerprint = fingerprintLogic(currentLogic);
   const currentVersion = persistedRecord?.confirmed?.version ?? null;
   const currentRevision = persistedRecord?.revision ?? 0;
-  const validDemoEvaluation = demoEvaluation?.questionId===questionId && demoEvaluation.version===currentVersion && demoEvaluation.revision===currentRevision && demoEvaluation.sourceFingerprint===currentFingerprint ? demoEvaluation : null;
+  // Server evaluations are bound to the evaluated content fingerprint. Draft
+  // version/revision can advance without a content change (material binding,
+  // publication), so fingerprint equality is the authoritative staleness check.
+  const validDemoEvaluation = demoEvaluation?.questionId===questionId && demoEvaluation.sourceFingerprint===currentFingerprint ? demoEvaluation : null;
   const showDemo = Boolean(draft.concern.trim() || draft.conclusion.trim() || draft.facts.trim() || draft.boundaries.trim());
-  const beginDemoEvaluation = () => {setDemoEvaluation(createDemoEvaluation({questionId,question:question.question,intent:question.intent,version:currentVersion,revision:currentRevision,logic:currentLogic}));setDemoView("evaluation")};
+  const runServerEvaluation = useCallback(async (): Promise<ResponseLogicRuleEvaluation | null> => {
+    setEvaluationError("");
+    setEvaluationPending(true);
+    try {
+      const resolved = await resolveResponseLogicRuleEvaluation({
+        questionId,
+        ...(currentRevision > 0 ? { expectedRevision: currentRevision } : {}),
+      });
+      setEvaluationPersisted(resolved.persisted);
+      setDemoEvaluation(resolved.evaluation);
+      return resolved.evaluation;
+    } catch (error) {
+      setEvaluationPersisted(null);
+      setEvaluationError(error instanceof Error ? error.message : "评估请求失败，请稍后重试");
+      return null;
+    } finally {
+      setEvaluationPending(false);
+    }
+  }, [questionId, currentRevision]);
+  const beginDemoEvaluation = () => { void runServerEvaluation().then(evaluation => { if (evaluation) setDemoView("evaluation"); }); };
 
   const showGenerationProcess =
     generating ||
@@ -1921,13 +1947,25 @@ function ResponseLogicQuestionEditor({
       )}
 
       {showDemo && demoView === "detail" && (
-        <div className="rl-eval-entry" style={{display:"flex",gap:10,flexWrap:"wrap",margin:"18px 0"}}>
-          <button type="button" className="rl-eval-entry-button" onClick={beginDemoEvaluation}>查看四维评估</button>
-          <button type="button" className="rl-eval-entry-button" onClick={() => {if (!validDemoEvaluation) {setDemoEvaluation(createDemoEvaluation({questionId,question:question.question,intent:question.intent,version:currentVersion,revision:currentRevision,logic:currentLogic}));}setDemoView("optimize")}}>生成优化应答逻辑</button>
+        <div className="rl-eval-entry" style={{display:"flex",gap:10,flexWrap:"wrap",margin:"18px 0",alignItems:"center"}}>
+          {evaluationPending ? (
+            <span role="status" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,color:"#667085"}}><Loader2 size={14} className="animate-spin"/>正在评估当前应答逻辑…</span>
+          ) : (
+            <>
+              <button type="button" className="rl-eval-entry-button" onClick={beginDemoEvaluation}>查看四维评估</button>
+              <button type="button" className="rl-eval-entry-button" onClick={() => { void (async () => { if (validDemoEvaluation) { setDemoView("optimize"); return; } const evaluation = await runServerEvaluation(); if (evaluation) setDemoView("optimize"); })(); }}>生成优化应答逻辑</button>
+              {evaluationError && <span role="alert" style={{display:"inline-flex",alignItems:"center",gap:8,fontSize:12,color:"#b64d52"}}>{evaluationError}<button type="button" className="rl-text-button" onClick={beginDemoEvaluation}>重试</button></span>}
+            </>
+          )}
         </div>
       )}
       {showDemo && demoView === "evaluation" && validDemoEvaluation && (
-        <ResponseLogicEvaluationPanel evaluation={validDemoEvaluation} onBack={()=>setDemoView("detail")} onOptimize={()=>setDemoView("optimize")} onLocate={field=>locateLogicField(field, ()=>setDemoView("detail"))}/>
+        <>
+          {evaluationPersisted === false && (
+            <p role="status" style={{margin:"0 0 10px",fontSize:12,color:"#a86722"}}>本次评估结果已生成，但尚未保存到服务器（评估历史存储待数据库迁移启用）；刷新后需重新评估。</p>
+          )}
+          <ResponseLogicEvaluationPanel evaluation={validDemoEvaluation} dataSourceLabel="服务端规则评估（未接入 Judge / Ragas / DeepEval 语义模型）" onBack={()=>setDemoView("detail")} onOptimize={()=>setDemoView("optimize")} onLocate={field=>locateLogicField(field, ()=>setDemoView("detail"))}/>
+        </>
       )}
       {showDemo && demoView === "optimize" && validDemoEvaluation && (
         <ResponseLogicOptimizationWorkflow key={`${questionId}:${currentVersion}:${currentRevision}:${currentFingerprint}`} evaluation={validDemoEvaluation} logic={currentLogic} onBack={()=>setDemoView("evaluation")}/>

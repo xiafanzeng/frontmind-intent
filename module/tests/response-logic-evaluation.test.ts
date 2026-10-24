@@ -11,7 +11,7 @@ describe("Response Logic frontend-sample evaluation",()=>{
   const result=createDemoEvaluation(input);
   expect(result.questionId).toBe("q1");expect(result.version).toBe(1);expect(result.revision).toBe(2);
   expect(result.sourceFingerprint).toBe(fingerprintLogic(logic));
-  expect(result.kind).toBe("sample-data");
+  expect(result.kind).toBe("rule-evaluation");
  });
  it("returns four independent dimensions with rubric-based content and no aggregate",()=>{
   const result=createDemoEvaluation(input);
@@ -96,7 +96,7 @@ describe("Response Logic frontend-sample evaluation",()=>{
   expect(markup).toContain("覆盖情况");
   expect(markup).toContain("判断依据");
   expect(markup).not.toContain('class="rl-eval-matrix');
-  expect(markup).toContain("前端示例数据");
+  expect(markup).toContain("本地预览示例数据");
   expect(markup).not.toContain("演示评估（未接真实后端）");
   expect(markup).not.toContain("模拟结果");
  });
