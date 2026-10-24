@@ -8,8 +8,8 @@ import {
 import type { ManagedAgentProfile } from "../contracts/manus-agent-profile.js";
 import {
   buildDeterministicTaskAttachmentArchive,
-  buildDirectorySkillArchive,
 } from "@frontmind/module-contracts/task-attachment-package";
+import { buildDirectorySkillArchive } from "./directory-skill-archive.js";
 import { assertUpstreamPromptBudget } from "@frontmind/module-contracts/upstream-prompt-budget";
 
 type PortfolioQuota = {
