@@ -23,6 +23,7 @@ import type { Request } from "express";
 import type { CoreProviderError, CoreRequest, CredentialHandle, ManusV2MessageEvent, ResponseLogicApiPorts } from "./task-ports.js";
 import { createResponseLogicEvaluationRouter } from "./response-logic-evaluation-api.js";
 import { createResponseLogicEvaluationStore } from "./response-logic-evaluation-store.js";
+import { createResponseLogicJudgeRouter } from "./response-logic-judge-api.js";
 /** Business routes, evidence assembly, task binding, adoption and recovery live in the module.
  * The host only supplies identity, transactional repositories and generic execution/file services. */
 export function createResponseLogicApi(core: ResponseLogicApiPorts) {
@@ -41,6 +42,11 @@ router.use("/evaluation", createResponseLogicEvaluationRouter({
   getResponseLogicEntry: core.getResponseLogicEntry,
   evaluationStore: createResponseLogicEvaluationStore({ getDb: core.getDb }),
 }));
+
+// LLM-as-Judge shares the same /api/response-logic mount. It runs as an async
+// model task using the existing credential, task ownership (upstream_resources)
+// and structured output infrastructure. No lastTaskId slot is consumed.
+router.use("/evaluation/judge", createResponseLogicJudgeRouter(core));
 
 function responseLogicPublicExecution(taskId: string, events: readonly ManusV2MessageEvent[]) {
   let turn = 0;
