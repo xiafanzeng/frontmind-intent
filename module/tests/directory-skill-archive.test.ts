@@ -66,9 +66,10 @@ describe("module-owned Intent Skill resources", () => {
 
   it("rejects linked resources and environment files", async () => {
     const root = await fixture();
-    await fs.symlink(path.join(root, "SKILL.md"), path.join(root, "references/linked.md"));
+    const linkedResources = path.join(root, "linked-resources");
+    await fs.symlink(path.join(root, "references"), linkedResources, process.platform === "win32" ? "junction" : "dir");
     await expect(build(root)).rejects.toThrow("non-regular entry");
-    await fs.rm(path.join(root, "references/linked.md"));
+    await fs.unlink(linkedResources);
     await fs.writeFile(path.join(root, ".env"), "PLACEHOLDER=value\n");
     await expect(build(root)).rejects.toThrow("environment file");
   });
