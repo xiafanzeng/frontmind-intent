@@ -48,7 +48,7 @@ const JUDGE_SKILL_ATTACHMENT_FILENAME = "response-logic-evaluator.skill.zip";
 const JUDGE_TURN_INPUT_ATTACHMENT_FILENAME = "response-logic-judge-turn-input.zip";
 const JUDGE_EVIDENCE_ATTACHMENT_FILENAME = "response-logic-judge-evidence.zip";
 
-type EvaluationCore = Pick<
+export type EvaluationCore = Pick<
   ResponseLogicApiPorts,
   | "enterpriseWorkspaceUserId"
   | "assertServiceCapability"
@@ -75,7 +75,7 @@ type EvaluationCore = Pick<
   getLatestKnowledgeSnapshot: ResponseLogicApiPorts["getLatestKnowledgeSnapshot"];
 };
 
-type KnowledgeSnapshotForJudge = Awaited<ReturnType<EvaluationCore["getLatestKnowledgeSnapshot"]>>;
+export type KnowledgeSnapshotForJudge = Awaited<ReturnType<EvaluationCore["getLatestKnowledgeSnapshot"]>>;
 
 const judgeStartInputSchema = z
   .object({
@@ -91,7 +91,7 @@ const judgeStatusQuerySchema = z
   })
   .strict();
 
-function judgeError(res: Response, status: number, code: string, message: string) {
+export function judgeError(res: Response, status: number, code: string, message: string) {
   res.setHeader("Cache-Control", "no-store");
   res.status(status).json({ error: { code, message } });
 }
@@ -271,17 +271,14 @@ ${evidenceInstruction}
  * knowledge-base call chains, then read the declared payload string (or a
  * directly stringified JSON value) and run the strict Zod contract.
  */
-function parseJudgePayload(
+/** Generic upstream envelope unwrap: {success,value,error} → parsed JSON value.
+ * Shared by the judge and optimizer chains so both parse identically. */
+export function parseStructuredEnvelopePayload(
   core: EvaluationCore,
   events: ReadonlyArray<ManusV2MessageEvent>,
-): {
-  ok: true;
-  judge: JudgeOutput;
-} | {
-  ok: false;
-  code: string;
-  message: string;
-} {
+  invalidJsonCode: string,
+  invalidJsonMessage: string,
+): { ok: true; parsed: unknown } | { ok: false; code: string; message: string } {
   for (const event of [...events].sort(
     (a, b) => b.timestamp - a.timestamp || b.id.localeCompare(a.id),
   )) {
@@ -296,23 +293,39 @@ function parseJudgePayload(
     }
     if (typeof payload !== "string") continue;
 
-    let parsed: unknown;
     try {
-      parsed = JSON.parse(payload);
+      return { ok: true, parsed: JSON.parse(payload) };
     } catch {
-      return { ok: false, code: "JUDGE_PAYLOAD_INVALID_JSON", message: "Judge 输出的 payload 不是有效 JSON" };
+      return { ok: false, code: invalidJsonCode, message: invalidJsonMessage };
     }
-
-    const schemaResult = judgeOutputSchema.safeParse(parsed);
-    if (!schemaResult.success) {
-      return { ok: false, code: "JUDGE_OUTPUT_SCHEMA_MISMATCH", message: `Judge 输出未通过 Schema 校验: ${schemaResult.error.issues[0]?.path.join(".")} — ${schemaResult.error.issues[0]?.message}` };
-    }
-    return { ok: true, judge: schemaResult.data };
   }
   return { ok: false, code: "JUDGE_STRUCTURED_OUTPUT_MISSING", message: "Judge 任务未返回结构化输出" };
 }
 
-function validateJudgeConsistency(
+export function parseJudgePayload(
+  core: EvaluationCore,
+  events: ReadonlyArray<ManusV2MessageEvent>,
+): {
+  ok: true;
+  judge: JudgeOutput;
+} | {
+  ok: false;
+  code: string;
+  message: string;
+} {
+  const envelope = parseStructuredEnvelopePayload(
+    core, events,
+    "JUDGE_PAYLOAD_INVALID_JSON", "Judge 输出的 payload 不是有效 JSON",
+  );
+  if (!envelope.ok) return envelope;
+  const schemaResult = judgeOutputSchema.safeParse(envelope.parsed);
+  if (!schemaResult.success) {
+    return { ok: false, code: "JUDGE_OUTPUT_SCHEMA_MISMATCH", message: `Judge 输出未通过 Schema 校验: ${schemaResult.error.issues[0]?.path.join(".")} — ${schemaResult.error.issues[0]?.message}` };
+  }
+  return { ok: true, judge: schemaResult.data };
+}
+
+export function validateJudgeConsistency(
   judge: JudgeOutput,
   logic: LogicSections,
   knowledgeContent: string | null,
@@ -428,7 +441,7 @@ function verifyKnowledgeEvidence(
 }
 
 /** Compact knowledge snapshot into a single searchable text (same approach as generation evidence). */
-function compactKnowledgeForVerification(snapshot: NonNullable<KnowledgeSnapshotForJudge>): string {
+export function compactKnowledgeForVerification(snapshot: NonNullable<KnowledgeSnapshotForJudge>): string {
   return snapshot.documents
     .map((doc) => doc.content)
     .join("\n\n");
@@ -438,11 +451,11 @@ function compactKnowledgeForVerification(snapshot: NonNullable<KnowledgeSnapshot
  * Router factory
  * ------------------------------------------------------------------------- */
 
-export function createResponseLogicJudgeRouter(core: EvaluationCore): import("express").Router {
-  const router = Router();
-
-  /** Shared prologue: auth, capability, configured question, record, revision. */
-  async function resolveContext(
+/** Shared prologue: auth, capability, configured question, record, revision.
+ * Reused by the judge router and the optimizer router so both endpoints bind
+ * requests to the exact same record/revision/fingerprint semantics. */
+export function createJudgeContextResolver(core: EvaluationCore) {
+  return async function resolveContext(
     req: CoreRequest,
     res: Response,
     questionId: string,
@@ -493,7 +506,12 @@ export function createResponseLogicJudgeRouter(core: EvaluationCore): import("ex
       logic,
       fingerprint: fingerprintLogic(logic),
     };
-  }
+  };
+}
+
+export function createResponseLogicJudgeRouter(core: EvaluationCore): import("express").Router {
+  const router = Router();
+  const resolveContext = createJudgeContextResolver(core);
 
   function judgeFailure(res: Response, error: unknown) {
     if (core.sendAiBillingError(res, error)) return;

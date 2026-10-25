@@ -24,6 +24,7 @@ import type { CoreProviderError, CoreRequest, CredentialHandle, ManusV2MessageEv
 import { createResponseLogicEvaluationRouter } from "./response-logic-evaluation-api.js";
 import { createResponseLogicEvaluationStore } from "./response-logic-evaluation-store.js";
 import { createResponseLogicJudgeRouter } from "./response-logic-judge-api.js";
+import { createResponseLogicOptimizationRouter } from "./response-logic-optimization-api.js";
 /** Business routes, evidence assembly, task binding, adoption and recovery live in the module.
  * The host only supplies identity, transactional repositories and generic execution/file services. */
 export function createResponseLogicApi(core: ResponseLogicApiPorts) {
@@ -47,6 +48,11 @@ router.use("/evaluation", createResponseLogicEvaluationRouter({
 // model task using the existing credential, task ownership (upstream_resources)
 // and structured output infrastructure. No lastTaskId slot is consumed.
 router.use("/evaluation/judge", createResponseLogicJudgeRouter(core));
+
+// LLM optimization of a draft driven by a verified judge diagnosis: the start
+// endpoint re-fetches and re-validates the referenced judge task server-side,
+// so client-supplied evaluation content is never trusted.
+router.use("/optimization", createResponseLogicOptimizationRouter(core));
 
 function responseLogicPublicExecution(taskId: string, events: readonly ManusV2MessageEvent[]) {
   let turn = 0;
