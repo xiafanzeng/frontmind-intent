@@ -2,35 +2,23 @@ import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { startUnifiedEvaluation } from "../client/response-logic-unified-evaluation.js";
 import {
   judgeEvaluationReducer,
   judgeStartBlocked,
   initialJudgeLifecycleState,
-  type JudgePhase,
 } from "../client/use-judge-evaluation.js";
 import { judgeContextKey } from "../client/response-logic-judge-client.js";
 import { judgeOutputSchema, type JudgeOutput } from "../contracts/response-logic-judge.js";
-import { createDemoEvaluation } from "../client/response-logic/mock-evaluation.js";
 import { ResponseLogicEvaluationPanel } from "../client/response-logic/evaluation-panel.js";
 import { renderJudgeDimension } from "../client/response-logic/judge-panel.js";
-import type { ResponseLogicRuleEvaluation } from "../client/response-logic-evaluation-client.js";
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
-  return { promise, resolve, reject };
-}
-
-/** Lets all pending microtasks (including the orchestrator's judge kickoff) run. */
-const flushAsync = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
 function buildJudge(boundaryRiskScore: number | null = 63): JudgeOutput {
   return judgeOutputSchema.parse({
     kind: "judge-evaluation",
     dimensions: {
-      relevance: { score: 85, band: "mostly_relevant", findings: [] },
+      relevance: { score: 85, band: "mostly_relevant", findings: [
+        { severity: "improve", evidence: "先核验资质与授权", evidenceSource: "draft", evidenceConfidence: "supported", reason: "结论首句未直接回应问题主语", suggestion: "在结论首句先给出对问题的直接回答" },
+      ] },
       completeness: { score: 75, coverage: [
         { field: "concern", status: "covered", findings: [] },
         { field: "conclusion", status: "covered", findings: [] },
@@ -45,83 +33,22 @@ function buildJudge(boundaryRiskScore: number | null = 63): JudgeOutput {
       boundaryRisk: { score: boundaryRiskScore, risks: [
         { key: "unverified_ranking", status: boundaryRiskScore === null ? "undetected" : "controlled", findings: [] },
         { key: "absolute_claim", status: boundaryRiskScore === null ? "not_applicable" : "controlled", findings: [] },
-        { key: "effect_promise", status: "uncontrolled", findings: [] },
+        { key: "effect_promise", status: "uncontrolled", findings: [
+          { severity: "risk", evidence: "", evidenceSource: "inference", evidenceConfidence: "unverifiable", reason: "发现效果承诺但边界未控制", suggestion: "为效果类表述补充适用前提" },
+        ] },
         { key: "unverified_comparison", status: "undetected", findings: [] },
         { key: "unsupported_fact", status: "partial", findings: [] },
         { key: "missing_precondition", status: "not_applicable", findings: [] },
       ], findings: [] },
     },
-    overallAssessment: "整体回应了选型问题。",
+    overallAssessment: "草稿整体回应了选型问题，但证据指引和边界控制有提升空间。",
   });
 }
 
-const logic = { concern: "对比三款 CRM 的总拥有成本", conclusion: "优先推荐 A，预算紧张时选 B", facts: "内部 2025 续约报价见附件", boundaries: "不做无依据排名，不承诺实施效果" };
-const ruleEvaluation: ResponseLogicRuleEvaluation = createDemoEvaluation({
-  questionId: "q1", question: "如何选择 CRM？", intent: "选型对比", version: 1, revision: 2, logic,
-});
+const QUESTION = "如何选择企业服务服务商？";
+const INTENT = "选型对比";
 
 const countOccurrences = (html: string, needle: string) => html.split(needle).length - 1;
-
-/* ------------------------------------------------------------------ */
-/* Orchestration: rule evaluation and judge start in parallel          */
-/* ------------------------------------------------------------------ */
-
-describe("startUnifiedEvaluation orchestration", () => {
-  it("fires the judge start without waiting for the rule evaluation to resolve", async () => {
-    const rule = deferred<ResponseLogicRuleEvaluation | null>();
-    const judgeGate = deferred<void>();
-    let judgeStarts = 0;
-    const promise = startUnifiedEvaluation({
-      runRuleEvaluation: () => rule.promise,
-      startJudgeEvaluation: async () => { judgeStarts++; await judgeGate.promise; },
-      enterEvaluationView: () => {},
-    });
-    await flushAsync();
-    // Rule evaluation is still pending, yet the judge task must already be
-    // in flight — the two evaluations run in parallel, not in series.
-    expect(judgeStarts).toBe(1);
-    rule.resolve(ruleEvaluation);
-    await promise;
-    judgeGate.resolve();
-  });
-
-  it("enters the evaluation view as soon as rule results arrive while the judge task is still running", async () => {
-    const rule = deferred<ResponseLogicRuleEvaluation | null>();
-    const judgeGate = deferred<void>();
-    let entered = 0;
-    const promise = startUnifiedEvaluation({
-      runRuleEvaluation: () => rule.promise,
-      startJudgeEvaluation: () => judgeGate.promise,
-      enterEvaluationView: () => { entered++; },
-    });
-    rule.resolve(ruleEvaluation);
-    await promise; // resolves without waiting for judgeGate
-    expect(entered).toBe(1);
-    judgeGate.resolve();
-  });
-
-  it("keeps the rule report when the judge start fails", async () => {
-    let entered = 0;
-    await startUnifiedEvaluation({
-      runRuleEvaluation: async () => ruleEvaluation,
-      startJudgeEvaluation: async () => { throw new Error("judge unavailable"); },
-      enterEvaluationView: () => { entered++; },
-    });
-    expect(entered).toBe(1);
-  });
-
-  it("still runs the judge independently and stays on the detail view when the rule evaluation fails", async () => {
-    let judgeStarts = 0;
-    let entered = 0;
-    await startUnifiedEvaluation({
-      runRuleEvaluation: async () => null,
-      startJudgeEvaluation: async () => { judgeStarts++; },
-      enterEvaluationView: () => { entered++; },
-    });
-    expect(judgeStarts).toBe(1);
-    expect(entered).toBe(0);
-  });
-});
 
 /* ------------------------------------------------------------------ */
 /* Judge lifecycle state machine: context protection + duplicate guard */
@@ -198,7 +125,7 @@ describe("judgeEvaluationReducer", () => {
     expect(after.errorCode).toBe("JUDGE_TRANSPORT_FAILED");
   });
 
-  it("marks poll failures and timeouts as failed without touching a rule report's context", () => {
+  it("marks poll failures and timeouts as failed", () => {
     const running = runningOn(K1);
     const failed = judgeEvaluationReducer(running, { type: "poll-failed", message: "x", code: "JUDGE_POLL_FAILED", contextKey: K1 });
     expect(failed.phase).toBe("failed");
@@ -229,48 +156,74 @@ describe("judgeEvaluationReducer", () => {
 });
 
 /* ------------------------------------------------------------------ */
-/* Unified report rendering: dual-source integration + null handling   */
+/* Formal report rendering: LLM-only scores, no rule fallback          */
 /* ------------------------------------------------------------------ */
 
-describe("unified four-dimension report rendering", () => {
-  const renderPanel = (props: { judgePhase?: JudgePhase; judgeResult?: JudgeOutput | null }) =>
+describe("formal four-dimension report rendering", () => {
+  const renderPanel = (props: Partial<Parameters<typeof ResponseLogicEvaluationPanel>[0]> & { judgePhase: "idle" | "starting" | "running" | "completed" | "failed" }) =>
     renderToStaticMarkup(createElement(ResponseLogicEvaluationPanel, {
-      evaluation: ruleEvaluation,
-      dataSourceLabel: "服务端规则评估＋LLM 语义判断",
+      question: QUESTION,
+      intent: INTENT,
+      judgeResult: null,
       onBack: () => {},
       onOptimize: () => {},
       ...props,
     }));
 
+  it("renders all four dimensions from judge data alone, with no rule content", () => {
+    const html = renderPanel({ judgePhase: "completed", judgeResult: buildJudge() });
+    expect(countOccurrences(html, 'class="rl-eval-card rl-eval-score-card"')).toBe(4);
+    // LLM scores present for scored dimensions (85/75/67) and diagnosis aggregates judge findings
+    expect(html).toContain(">85</strong>");
+    expect(html).toContain(">67</strong>");
+    expect(html).toContain("草稿整体回应了选型问题");
+    expect(html).toContain("待改进");
+    // No rule-engine content anywhere in the formal report
+    expect(html).not.toContain("规则评估");
+    expect(html).not.toContain("服务端规则");
+  });
+
   it("renders boundaryRisk score=null as 未评估 instead of a numeric score", () => {
-    const html = renderToStaticMarkup(renderJudgeDimension(buildJudge(null), "boundaryRisk") as ReactElement);
+    const html = renderPanel({ judgePhase: "completed", judgeResult: buildJudge(null) });
     expect(html).toContain("未评估");
-    expect(html).toContain("无可计分的适用风险项");
-    expect(html).not.toMatch(/<strong>\s*\d+\s*<\/strong>/);
+    expect(html).not.toMatch(/<strong[^>]*>\s*0\s*<small>/);
+    const dimension = renderToStaticMarkup(renderJudgeDimension(buildJudge(null), "boundaryRisk") as ReactElement);
+    expect(dimension).toContain("未评估");
+    expect(dimension).toContain("无可计分的适用风险项");
+    expect(dimension).not.toMatch(/<strong>\s*\d+\s*<\/strong>/);
   });
 
   it("renders a numeric boundaryRisk score normally", () => {
-    const html = renderToStaticMarkup(renderJudgeDimension(buildJudge(63), "boundaryRisk") as ReactElement);
-    expect(html).toMatch(/<strong>63<\/strong>/);
-    expect(html).not.toContain("未评估");
+    const dimension = renderToStaticMarkup(renderJudgeDimension(buildJudge(63), "boundaryRisk") as ReactElement);
+    expect(dimension).toMatch(/<strong>63<\/strong>/);
   });
 
-  it("embeds a judge section into all four dimension cards with the running banner", () => {
-    const html = renderPanel({ judgePhase: "running", judgeResult: buildJudge() });
-    expect(countOccurrences(html, 'class="rl-judge-section"')).toBe(4);
-    expect(countOccurrences(html, 'class="rl-judge-source-tag"')).toBe(4);
+  it("shows the running state instead of any partial report", () => {
+    const html = renderPanel({ judgePhase: "running" });
     expect(html).toContain("LLM 语义评估进行中");
+    expect(countOccurrences(html, 'class="rl-eval-card rl-eval-score-card"')).toBe(1);
+    expect(html).not.toContain('role="meter"');
   });
 
-  it("shows the rule-only report without judge sections when the judge is absent", () => {
-    const html = renderPanel({ judgePhase: undefined, judgeResult: undefined });
-    expect(html).not.toContain("rl-judge-section");
-    expect(html).not.toContain("rl-judge-source-tag");
+  it("surfaces the real judge error with a retry entry and never falls back to rule scores", () => {
+    const html = renderPanel({ judgePhase: "failed", judgeError: "Judge 请求失败 · RESPONSE_LOGIC_JUDGE_FAILED", onRetry: () => {} });
+    expect(html).toContain("LLM 语义评估未完成");
+    expect(html).toContain("Judge 请求失败 · RESPONSE_LOGIC_JUDGE_FAILED");
+    expect(html).toContain("重新发起评估");
+    expect(html).not.toContain('role="meter"');
+    expect(html).not.toContain("规则评估");
   });
 
-  it("keeps rule results and explains that they are unaffected when the judge failed", () => {
-    const html = renderPanel({ judgePhase: "failed", judgeResult: undefined });
-    expect(html).toContain("规则检查结果不受影响");
-    expect(html).not.toContain('class="rl-judge-section"');
+  it("does not depend on any rule-evaluation input: the panel accepts none", () => {
+    // Compiling this call with only judge props is the contract; rendering must succeed.
+    const html = renderPanel({ judgePhase: "completed", judgeResult: buildJudge() });
+    expect(html).toContain(QUESTION);
+    expect(html).toContain(INTENT);
+  });
+
+  it("renders an idle notice before any evaluation starts", () => {
+    const html = renderPanel({ judgePhase: "idle" });
+    expect(html).toContain("尚未评估");
+    expect(html).not.toContain('role="meter"');
   });
 });

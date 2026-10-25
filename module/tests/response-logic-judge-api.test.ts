@@ -2,10 +2,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import express, { type Request } from "express";
 import http from "node:http";
 import { once } from "node:events";
-import { createResponseLogicJudgeRouter } from "../server/response-logic-judge-api";
+import { createResponseLogicJudgeRouter, judgeSkillDirectoryCandidates } from "../server/response-logic-judge-api";
+import { buildDirectorySkillArchive } from "../server/directory-skill-archive";
+import { mkdtemp, cp, mkdir, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { CredentialHandle, CoreRequest } from "../server/task-ports";
 import type { ResponseLogicRecordDto } from "../contracts/response-logic";
-import { createResponseLogicRuleEvaluation, fingerprintLogic } from "../contracts/response-logic-evaluation";
+import { fingerprintLogic } from "../contracts/response-logic-evaluation";
 import { judgeOutputSchema, type JudgeOutput } from "../contracts/response-logic-judge";
 
 class ServiceEntitlementError extends Error {
@@ -111,6 +115,7 @@ async function makeApp(options: MockOptions = {}) {
   };
   let uploadedFiles: Array<{ fileId: string; filename: string }> = [];
   let createdTask: { taskId: string } | null = null;
+  const archives: Array<{ name: string; entrypoint: string; files: Array<{ path: string; content: string }> }> = [];
 
   const client = {
     createTask: async (input: { prompt: string; attachments: unknown[]; title: string; agentProfile?: string; locale: string; interactiveMode: boolean; structuredOutputSchema: Record<string, unknown> }) => {
@@ -154,9 +159,10 @@ async function makeApp(options: MockOptions = {}) {
       if (options.recordUpstreamResourceError) throw options.recordUpstreamResourceError;
     },
     getLatestKnowledgeSnapshot: async () => options.knowledgeSnapshot ?? null,
-    buildDeterministicTaskAttachmentArchive: async (input: { name: string; entrypoint: string; files: Array<{ path: string; content: string }>; metadata?: Record<string, unknown> }) => ({
-      bytes: Buffer.from(JSON.stringify(input.files)), contentHash: "a".repeat(64),
-    }),
+    buildDeterministicTaskAttachmentArchive: async (input: { name: string; entrypoint: string; files: Array<{ path: string; content: string }>; metadata?: Record<string, unknown> }) => {
+      archives.push(input);
+      return { bytes: Buffer.from(JSON.stringify(input.files)), contentHash: "a".repeat(64) };
+    },
     classifyManusV2StructuredResultEnvelope: (value: unknown) => {
       if (typeof value === "object" && value !== null && "payload" in (value as Record<string, unknown>)) {
         return { kind: "accepted", value };
@@ -191,7 +197,7 @@ async function makeApp(options: MockOptions = {}) {
   await once(server, "listening");
   const addr = server.address();
   if (!addr || typeof addr === "string") throw new Error("no addr");
-  return `http://127.0.0.1:${addr.port}`;
+  return { url: `http://127.0.0.1:${addr.port}`, archives };
 }
 
 async function postStart(url: string, body: unknown) {
@@ -205,7 +211,7 @@ async function getStatus(url: string, taskId: string, query = "questionId=q1&exp
 
 describe("judge API: POST / (start)", () => {
   it("creates a judge task and returns running", async () => {
-    const url = await makeApp({});
+    const { url } = await makeApp({});
     const res = await postStart(url, { questionId: "q1" });
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -214,46 +220,65 @@ describe("judge API: POST / (start)", () => {
     expect(body.recordRevision).toBe(3);
     expect(body.sourceFingerprint).toBe(fingerprintLogic(logic));
     expect(body.judgeVersion).toBe("1");
+    expect(body.ruleVersion).toBeUndefined();
+  });
+
+  it("sends the judge model no rule evaluation and full question context in turn-input", async () => {
+    const { url, archives } = await makeApp({});
+    const res = await postStart(url, { questionId: "q1" });
+    expect(res.status).toBe(200);
+    const turnInputArchive = archives.find(a => a.name === "response-logic-judge-turn-input");
+    expect(turnInputArchive).toBeDefined();
+    const turnInput = JSON.parse(turnInputArchive!.files[0]!.content) as Record<string, unknown>;
+    // The LLM is the sole formal scorer: no rule-engine reference may reach the model.
+    expect(turnInput).not.toHaveProperty("ruleEvaluation");
+    expect(JSON.stringify(turnInput)).not.toContain("ruleEvaluation");
+    // Question / intent / draft / knowledge identity are still fully provided.
+    expect((turnInput.question as Record<string, unknown>).text).toBe(baseRecord.question);
+    expect((turnInput.question as Record<string, unknown>).intent).toBe(baseRecord.intent);
+    expect(turnInput.currentDraft).toEqual(logic);
+    expect(turnInput.knowledgeSnapshot).toEqual({ available: false, evidenceAttachment: null, restriction: expect.any(String) });
+    expect(turnInput.outputContract).toEqual(expect.objectContaining({ noAggregateScore: true }));
   });
 
   it("rejects unauthenticated request with 401", async () => {
-    const url = await makeApp({ authenticated: false });
+    const { url } = await makeApp({ authenticated: false });
     const res = await postStart(url, { questionId: "q1" });
     expect(res.status).toBe(401);
   });
 
   it("rejects invalid body with 400", async () => {
-    const url = await makeApp({});
+    const { url } = await makeApp({});
     const res = await postStart(url, {});
     expect(res.status).toBe(400);
   });
 
   it("returns 422 when question is not configured", async () => {
-    const url = await makeApp({ configured: false });
+    const { url } = await makeApp({ configured: false });
     const res = await postStart(url, { questionId: "q1" });
     expect(res.status).toBe(422);
   });
 
   it("returns 404 when no record exists", async () => {
-    const url = await makeApp({ record: null });
+    const { url } = await makeApp({ record: null });
     const res = await postStart(url, { questionId: "q1" });
     expect(res.status).toBe(404);
   });
 
   it("returns 428 when no credential is configured", async () => {
-    const url = await makeApp({ hasCredential: false });
+    const { url } = await makeApp({ hasCredential: false });
     const res = await postStart(url, { questionId: "q1" });
     expect(res.status).toBe(428);
   });
 
   it("maps capability errors", async () => {
-    const url = await makeApp({ capabilityError: true });
+    const { url } = await makeApp({ capabilityError: true });
     const res = await postStart(url, { questionId: "q1" });
     expect(res.status).toBe(403);
   });
 
   it("returns 409 on revision conflict", async () => {
-    const url = await makeApp({});
+    const { url } = await makeApp({});
     const res = await postStart(url, { questionId: "q1", expectedRevision: 99 });
     expect(res.status).toBe(409);
   });
@@ -261,7 +286,7 @@ describe("judge API: POST / (start)", () => {
 
 describe("judge API: GET /tasks/:taskId/status", () => {
   it("returns 202 running while task is in progress", async () => {
-    const url = await makeApp({ upstreamEvents: [{ id: "e1", type: "status_update", timestamp: Date.now(), status_update: { agent_status: "running" } }] });
+    const { url } = await makeApp({ upstreamEvents: [{ id: "e1", type: "status_update", timestamp: Date.now(), status_update: { agent_status: "running" } }] });
     const res = await getStatus(url, "task-judge-001");
     expect(res.status).toBe(202);
     const body = await res.json();
@@ -271,7 +296,7 @@ describe("judge API: GET /tasks/:taskId/status", () => {
   it("returns completed with valid judge output", async () => {
     const payload = JSON.stringify(validJudge);
     const events = [judgeEvent(payload), stoppedEvent()];
-    const url = await makeApp({ upstreamEvents: events });
+    const { url } = await makeApp({ upstreamEvents: events });
     const res = await getStatus(url, "task-judge-001");
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -284,7 +309,7 @@ describe("judge API: GET /tasks/:taskId/status", () => {
 
   it("returns 422 on invalid JSON payload", async () => {
     const events = [judgeEvent("not valid json"), stoppedEvent()];
-    const url = await makeApp({ upstreamEvents: events });
+    const { url } = await makeApp({ upstreamEvents: events });
     const res = await getStatus(url, "task-judge-001");
     expect(res.status).toBe(422);
     const body = await res.json();
@@ -294,7 +319,7 @@ describe("judge API: GET /tasks/:taskId/status", () => {
   it("returns 422 on schema mismatch", async () => {
     const bad = { ...validJudge, dimensions: { ...validJudge.dimensions, relevance: { ...validJudge.dimensions.relevance, score: 999 } } };
     const events = [judgeEvent(JSON.stringify(bad)), stoppedEvent()];
-    const url = await makeApp({ upstreamEvents: events });
+    const { url } = await makeApp({ upstreamEvents: events });
     const res = await getStatus(url, "task-judge-001");
     expect(res.status).toBe(422);
     const body = await res.json();
@@ -305,7 +330,7 @@ describe("judge API: GET /tasks/:taskId/status", () => {
     const bad = structuredClone(validJudge);
     bad.dimensions.completeness.score = 100; // recompute expects 75
     const events = [judgeEvent(JSON.stringify(bad)), stoppedEvent()];
-    const url = await makeApp({ upstreamEvents: events });
+    const { url } = await makeApp({ upstreamEvents: events });
     const res = await getStatus(url, "task-judge-001");
     expect(res.status).toBe(422);
     const body = await res.json();
@@ -317,7 +342,7 @@ describe("judge API: GET /tasks/:taskId/status", () => {
     const bad = structuredClone(validJudge);
     bad.dimensions.actionability.score = 100; // recompute expects 67
     const events = [judgeEvent(JSON.stringify(bad)), stoppedEvent()];
-    const url = await makeApp({ upstreamEvents: events });
+    const { url } = await makeApp({ upstreamEvents: events });
     const res = await getStatus(url, "task-judge-001");
     expect(res.status).toBe(422);
     expect((await res.json()).error.code).toBe("JUDGE_SCORE_INCONSISTENT");
@@ -327,7 +352,7 @@ describe("judge API: GET /tasks/:taskId/status", () => {
     const bad = structuredClone(validJudge);
     bad.dimensions.boundaryRisk.score = 100; // recompute expects 63
     const events = [judgeEvent(JSON.stringify(bad)), stoppedEvent()];
-    const url = await makeApp({ upstreamEvents: events });
+    const { url } = await makeApp({ upstreamEvents: events });
     const res = await getStatus(url, "task-judge-001");
     expect(res.status).toBe(422);
     expect((await res.json()).error.code).toBe("JUDGE_SCORE_INCONSISTENT");
@@ -340,7 +365,7 @@ describe("judge API: GET /tasks/:taskId/status", () => {
       risk.status = "undetected" as typeof risk.status;
     }
     const events = [judgeEvent(JSON.stringify(bad)), stoppedEvent()];
-    const url = await makeApp({ upstreamEvents: events });
+    const { url } = await makeApp({ upstreamEvents: events });
     const res = await getStatus(url, "task-judge-001");
     expect(res.status).toBe(422);
     const body = await res.json();
@@ -355,7 +380,7 @@ describe("judge API: GET /tasks/:taskId/status", () => {
       risk.status = "undetected" as typeof risk.status;
     }
     const events = [judgeEvent(JSON.stringify(judge)), stoppedEvent()];
-    const url = await makeApp({ upstreamEvents: events });
+    const { url } = await makeApp({ upstreamEvents: events });
     const res = await getStatus(url, "task-judge-001");
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -371,7 +396,7 @@ describe("judge API: GET /tasks/:taskId/status", () => {
       reason: "test", suggestion: "test",
     }];
     const events = [judgeEvent(JSON.stringify(bad)), stoppedEvent()];
-    const url = await makeApp({ upstreamEvents: events });
+    const { url } = await makeApp({ upstreamEvents: events });
     const res = await getStatus(url, "task-judge-001");
     expect(res.status).toBe(422);
     const body = await res.json();
@@ -380,14 +405,14 @@ describe("judge API: GET /tasks/:taskId/status", () => {
 
   it("returns 422 when task failed", async () => {
     const events = [{ id: "e1", type: "status_update", timestamp: Date.now(), status_update: { agent_status: "error" } }];
-    const url = await makeApp({ upstreamEvents: events });
+    const { url } = await makeApp({ upstreamEvents: events });
     const res = await getStatus(url, "task-judge-001");
     expect(res.status).toBe(422);
     expect((await res.json()).error.code).toBe("RESPONSE_LOGIC_JUDGE_TASK_FAILED");
   });
 
   it("returns 403 for a task not owned by this user", async () => {
-    const url = await makeApp({});
+    const { url } = await makeApp({});
     const res = await getStatus(url, "someone-elses-task");
     expect(res.status).toBe(403);
     expect((await res.json()).error.code).toBe("RESPONSE_LOGIC_JUDGE_TASK_FORBIDDEN");
@@ -400,7 +425,7 @@ describe("judge API: GET /tasks/:taskId/status", () => {
     // is enforced by the revision check and evidence verification.
     // Here we verify that a nonexistent task ID for a different question
     // is rejected at the ownership level.
-    const url = await makeApp({});
+    const { url } = await makeApp({});
     const res = await getStatus(url, "nonexistent-task-for-q2", "questionId=q2&expectedRevision=3");
     expect(res.status).toBe(403);
   });
@@ -408,7 +433,7 @@ describe("judge API: GET /tasks/:taskId/status", () => {
   it("returns 409 when record revision has changed since task creation (stale context)", async () => {
     // Task was created when revision was 3; current revision is now 5
     const changedRecord = { ...baseRecord, revision: 5 };
-    const url = await makeApp({ record: changedRecord });
+    const { url } = await makeApp({ record: changedRecord });
     // Client passes the original revision 3, but the record is at 5
     const res = await getStatus(url, "task-judge-001", "questionId=q1&expectedRevision=3");
     expect(res.status).toBe(409);
@@ -418,7 +443,7 @@ describe("judge API: GET /tasks/:taskId/status", () => {
   });
 
   it("start response includes knowledgeFingerprint for client-side context tracking", async () => {
-    const url = await makeApp({});
+    const { url } = await makeApp({});
     const res = await postStart(url, { questionId: "q1" });
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -428,7 +453,7 @@ describe("judge API: GET /tasks/:taskId/status", () => {
   });
 
   it("returns 401 when unauthenticated", async () => {
-    const url = await makeApp({ authenticated: false });
+    const { url } = await makeApp({ authenticated: false });
     const res = await getStatus(url, "task-judge-001");
     expect(res.status).toBe(401);
   });
@@ -436,7 +461,7 @@ describe("judge API: GET /tasks/:taskId/status", () => {
   it("returns 422 on unknown field in judge output", async () => {
     const bad = { ...validJudge, overallScore: 85 };
     const events = [judgeEvent(JSON.stringify(bad)), stoppedEvent()];
-    const url = await makeApp({ upstreamEvents: events });
+    const { url } = await makeApp({ upstreamEvents: events });
     const res = await getStatus(url, "task-judge-001");
     expect(res.status).toBe(422);
     expect((await res.json()).error.code).toBe("JUDGE_OUTPUT_SCHEMA_MISMATCH");
@@ -444,7 +469,7 @@ describe("judge API: GET /tasks/:taskId/status", () => {
 
   it("returns 422 when structured output is missing", async () => {
     const events = [stoppedEvent()];
-    const url = await makeApp({ upstreamEvents: events });
+    const { url } = await makeApp({ upstreamEvents: events });
     const res = await getStatus(url, "task-judge-001");
     expect(res.status).toBe(422);
     expect((await res.json()).error.code).toBe("JUDGE_STRUCTURED_OUTPUT_MISSING");
@@ -468,7 +493,7 @@ describe("judge API: knowledge evidence verification", () => {
       reason: "知识库中提到公司背景", suggestion: "补充具体产品信息",
     }];
     const events = [judgeEvent(JSON.stringify(judge)), stoppedEvent()];
-    const url = await makeApp({ upstreamEvents: events, knowledgeSnapshot: null });
+    const { url } = await makeApp({ upstreamEvents: events, knowledgeSnapshot: null });
     const res = await getStatus(url, "task-judge-001");
     expect(res.status).toBe(422);
     const body = await res.json();
@@ -484,7 +509,7 @@ describe("judge API: knowledge evidence verification", () => {
       reason: "知识库中确认公司背景", suggestion: "引用具体数据",
     }];
     const events = [judgeEvent(JSON.stringify(judge)), stoppedEvent()];
-    const url = await makeApp({ upstreamEvents: events, knowledgeSnapshot });
+    const { url } = await makeApp({ upstreamEvents: events, knowledgeSnapshot });
     const res = await getStatus(url, "task-judge-001");
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -499,7 +524,7 @@ describe("judge API: knowledge evidence verification", () => {
       reason: "test", suggestion: "test",
     }];
     const events = [judgeEvent(JSON.stringify(judge)), stoppedEvent()];
-    const url = await makeApp({ upstreamEvents: events, knowledgeSnapshot });
+    const { url } = await makeApp({ upstreamEvents: events, knowledgeSnapshot });
     const res = await getStatus(url, "task-judge-001");
     expect(res.status).toBe(422);
     const body = await res.json();
@@ -509,7 +534,7 @@ describe("judge API: knowledge evidence verification", () => {
 
 describe("judge API: recordUpstreamResource failure", () => {
   it("returns 502 with binding pending when ownership recording fails after task creation", async () => {
-    const url = await makeApp({
+    const { url } = await makeApp({
       recordUpstreamResourceError: new Error("database write failed"),
     });
     const res = await postStart(url, { questionId: "q1" });
@@ -517,5 +542,59 @@ describe("judge API: recordUpstreamResource failure", () => {
     const body = await res.json();
     expect(body.error.code).toBe("RESPONSE_LOGIC_JUDGE_BINDING_PENDING");
     expect(body.error.resetRequired).toBe(true);
+  });
+});
+
+describe("judge skill directory resolution", () => {
+  it("uses the configured path as the only candidate when provided", () => {
+    expect(judgeSkillDirectoryCandidates("/srv/skills/response-logic-evaluator.skill"))
+      .toEqual(["/srv/skills/response-logic-evaluator.skill"]);
+  });
+
+  it("falls back to dev and production layouts in order when unconfigured", () => {
+    const candidates = judgeSkillDirectoryCandidates(undefined);
+    expect(candidates).toHaveLength(4);
+    expect(candidates[0]).toContain("workflows");
+    const normalized = candidates[3]!.replaceAll("\\", "/");
+    expect(normalized).toMatch(/\/module-build\/module\/workflows\/response-logic-evaluator\.skill$/);
+  });
+
+  it("packages a complete skill from a configured temp directory", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "judge-skill-"));
+    try {
+      const skillSource = join(import.meta.dirname, "../workflows/response-logic-evaluator.skill");
+      await cp(skillSource, dir, { recursive: true });
+      const archive = await buildDirectorySkillArchive({
+        name: "response-logic-evaluator", version: "1",
+        directoryCandidates: judgeSkillDirectoryCandidates(dir),
+        files: ["SKILL.md", "references/output-contract.md", "references/rubric.md"],
+      });
+      expect(archive.contentHash).toMatch(/^[a-f0-9]{64}$/);
+      expect(archive.bytes.length).toBeGreaterThan(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("fails loudly when a configured directory is missing or incomplete", async () => {
+    const empty = await mkdtemp(join(tmpdir(), "judge-skill-empty-"));
+    try {
+      await mkdir(join(empty, "references"), { recursive: true });
+      await writeFile(join(empty, "SKILL.md"), "# stub\n", "utf8");
+      // references/output-contract.md missing → incomplete skill must be rejected
+      await expect(buildDirectorySkillArchive({
+        name: "response-logic-evaluator", version: "1",
+        directoryCandidates: [empty],
+        files: ["SKILL.md", "references/output-contract.md", "references/rubric.md"],
+      })).rejects.toThrow(/missing or empty/);
+    } finally {
+      await rm(empty, { recursive: true, force: true });
+    }
+    // nonexistent configured directory → clear error, no silent fallback
+    await expect(buildDirectorySkillArchive({
+      name: "response-logic-evaluator", version: "1",
+      directoryCandidates: judgeSkillDirectoryCandidates(join(tmpdir(), "does-not-exist-skill")),
+      files: ["SKILL.md"],
+    })).rejects.toThrow(/Could not load Skill/);
   });
 });

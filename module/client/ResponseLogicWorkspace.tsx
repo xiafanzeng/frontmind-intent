@@ -53,9 +53,7 @@ import {
 import "./response-logic-workspace.css";
 import {ResponseLogicEvaluationPanel} from "./response-logic/evaluation-panel.js";
 import {ResponseLogicOptimizationWorkflow} from "./response-logic/optimization-workflow.js";
-import {createDemoEvaluation, fingerprintLogic, type LogicField, type LogicSections} from "./response-logic/mock-evaluation.js";
-import {resolveResponseLogicRuleEvaluation, type ResponseLogicRuleEvaluation} from "./response-logic-evaluation-client.js";
-import {startUnifiedEvaluation} from "./response-logic-unified-evaluation.js";
+import {fingerprintLogic, type LogicSections} from "./response-logic/mock-evaluation.js";
 import {useJudgeEvaluation} from "./use-judge-evaluation.js";
 import {
   parseResponseLogicReply as parseResponseLogicReplyCore,
@@ -136,19 +134,6 @@ export type ResponseLogicPreviewAdapter = {
     group: IntentQuestionGroup,
   ) => ConfirmedResponseLogic;
   Dialogue: ComponentType<ResponseLogicPreviewDialogueProps>;
-};
-
-const locateLogicField = (field: LogicField, showDetail: () => void) => {
-  showDetail();
-  window.setTimeout(() => {
-    const el = document.getElementById(`rl-logic-${field}`);
-    if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
-    el.classList.remove("rl-locate-flash");
-    void el.offsetWidth;
-    el.classList.add("rl-locate-flash");
-    window.setTimeout(() => el.classList.remove("rl-locate-flash"), 3200);
-  }, 90);
 };
 
 function createEmptyDraft(question: IntentQuestion): LogicDraft {
@@ -993,31 +978,29 @@ function PreviewResponseLogicEditor({
       : createEmptyDraft({ id: "", question: "", intent: "", summary: "" }),
   );
   const [demoView, setDemoView] = useState<"detail"|"evaluation"|"optimize">("detail");
-  const [demoEvaluation, setDemoEvaluation] = useState<ReturnType<typeof createDemoEvaluation>|null>(null);
   if (!entry) return <ResponseLogicMissingQuestionState />;
   const previewLogic: LogicSections = {concern:draft.concern,conclusion:draft.conclusion,facts:draft.facts,boundaries:draft.boundaries};
   const previewFingerprint = fingerprintLogic(previewLogic);
-  const validDemoEvaluation = demoEvaluation?.questionId===questionId && demoEvaluation.sourceFingerprint===previewFingerprint ? demoEvaluation : null;
   const showDemo = Boolean(draft.concern.trim() || draft.conclusion.trim() || draft.facts.trim() || draft.boundaries.trim());
-  const beginDemoEvaluation = () => {setDemoEvaluation(createDemoEvaluation({questionId:entry.question.id,question:entry.question.question,intent:entry.question.intent ?? "",version:null,revision:0,logic:previewLogic}));setDemoView("evaluation")};
+  // Local preview has no server connection: the formal LLM evaluation is not
+  // available here, so the evaluation view explains that instead of faking one.
+  const beginDemoEvaluation = () => setDemoView("evaluation");
   return (
     <section className="rl-single-page">
       <ResponseLogicPageHeader group={entry.group} question={entry.question} />
       {showDemo && demoView === "detail" && (
         <div className="rl-eval-entry" style={{display:"flex",gap:10,flexWrap:"wrap",margin:"18px 0"}}>
           <button type="button" className="rl-eval-entry-button" onClick={beginDemoEvaluation}>查看四维评估</button>
-          <button type="button" className="rl-eval-entry-button" onClick={() => {if (!validDemoEvaluation) {setDemoEvaluation(createDemoEvaluation({questionId:entry.question.id,question:entry.question.question,intent:entry.question.intent ?? "",version:null,revision:0,logic:previewLogic}));}setDemoView("optimize")}}>生成优化应答逻辑</button>
+          <button type="button" className="rl-eval-entry-button" onClick={()=>setDemoView("optimize")}>生成优化应答逻辑</button>
         </div>
       )}
-      {showDemo && demoView === "evaluation" && validDemoEvaluation && (
-        <ResponseLogicEvaluationPanel evaluation={validDemoEvaluation} onBack={()=>setDemoView("detail")} onOptimize={()=>setDemoView("optimize")} onLocate={field=>locateLogicField(field, ()=>setDemoView("detail"))}/>
+      {showDemo && demoView === "evaluation" && (
+        <div className="rl-eval-entry" role="status" style={{margin:"18px 0"}}>本地预览模式未连接服务器，LLM 语义评估不可用；请在正式环境中查看四维评估。<button type="button" className="rl-text-button" onClick={()=>setDemoView("detail")}>返回应答逻辑编辑</button></div>
       )}
-      {showDemo && demoView === "optimize" && validDemoEvaluation && (
-        <ResponseLogicOptimizationWorkflow key={`${questionId}:preview:${previewFingerprint}`} evaluation={validDemoEvaluation} logic={previewLogic} onBack={()=>setDemoView("evaluation")}/>
+      {showDemo && demoView === "optimize" && (
+        <ResponseLogicOptimizationWorkflow key={`${questionId}:preview:${previewFingerprint}`} question={entry.question.question} intent={entry.question.intent ?? ""} contextKey={`${questionId}:preview:${previewFingerprint}`} logic={previewLogic} onBack={()=>setDemoView("evaluation")}/>
       )}
-      {demoView !== "detail" && !validDemoEvaluation && (
-        <div className="rl-eval-entry" role="status">当前应答逻辑或问题已变化，评估结果已失效。<button type="button" className="rl-text-button" onClick={beginDemoEvaluation}>重新查看评估</button><button type="button" className="rl-text-button" onClick={()=>setDemoView("detail")}>返回应答逻辑编辑</button></div>
-      )}
+
       {demoView === "detail" && <LogicEditorCard
         draft={draft}
         frozen={false}
@@ -1228,10 +1211,6 @@ function ResponseLogicQuestionEditor({
   });
   const startLock = useRef(false);
   const [demoView, setDemoView] = useState<"detail"|"evaluation"|"optimize">("detail");
-  const [demoEvaluation, setDemoEvaluation] = useState<ReturnType<typeof createDemoEvaluation>|null>(null);
-  const [evaluationPending, setEvaluationPending] = useState(false);
-  const [evaluationError, setEvaluationError] = useState("");
-  const [evaluationPersisted, setEvaluationPersisted] = useState<boolean | null>(null);
 
   const persistedRecord = persistence.records?.find(
     (record) => record.questionId === questionId,
@@ -1808,40 +1787,17 @@ function ResponseLogicQuestionEditor({
   const currentFingerprint = fingerprintLogic(currentLogic);
   const currentVersion = persistedRecord?.confirmed?.version ?? null;
   const currentRevision = persistedRecord?.revision ?? 0;
-  // Server evaluations are bound to the evaluated content fingerprint. Draft
-  // version/revision can advance without a content change (material binding,
-  // publication), so fingerprint equality is the authoritative staleness check.
-  const validDemoEvaluation = demoEvaluation?.questionId===questionId && demoEvaluation.sourceFingerprint===currentFingerprint ? demoEvaluation : null;
   const showDemo = Boolean(draft.concern.trim() || draft.conclusion.trim() || draft.facts.trim() || draft.boundaries.trim());
-  const runServerEvaluation = useCallback(async (): Promise<ResponseLogicRuleEvaluation | null> => {
-    setEvaluationError("");
-    setEvaluationPending(true);
-    try {
-      const resolved = await resolveResponseLogicRuleEvaluation({
-        questionId,
-        ...(currentRevision > 0 ? { expectedRevision: currentRevision } : {}),
-      });
-      setEvaluationPersisted(resolved.persisted);
-      setDemoEvaluation(resolved.evaluation);
-      return resolved.evaluation;
-    } catch (error) {
-      setEvaluationPersisted(null);
-      setEvaluationError(error instanceof Error ? error.message : "评估请求失败，请稍后重试");
-      return null;
-    } finally {
-      setEvaluationPending(false);
-    }
-  }, [questionId, currentRevision]);
-  // LLM-as-Judge async evaluation — integrated into the unified evaluation flow,
-  // not a separate button. Started by beginDemoEvaluation alongside rule evaluation.
+  // LLM-as-Judge is the sole formal scorer. The rule evaluation engine remains
+  // a server-side internal diagnostic and is never invoked by this flow.
   const judge = useJudgeEvaluation({ questionId, recordRevision: currentRevision, sourceFingerprint: currentFingerprint });
   const beginDemoEvaluation = () => {
-    void startUnifiedEvaluation({
-      runRuleEvaluation: runServerEvaluation,
-      startJudgeEvaluation: () => judge.start(),
-      enterEvaluationView: () => setDemoView("evaluation"),
-    });
+    void judge.start();
+    setDemoView("evaluation");
   };
+  const judgeErrorText = judge.state.phase === "failed"
+    ? [judge.state.error, judge.state.errorCode].filter(Boolean).join(" · ") || undefined
+    : undefined;
 
   const showGenerationProcess =
     generating ||
@@ -1959,29 +1915,17 @@ function ResponseLogicQuestionEditor({
 
       {showDemo && demoView === "detail" && (
         <div className="rl-eval-entry" style={{display:"flex",gap:10,flexWrap:"wrap",margin:"18px 0",alignItems:"center"}}>
-          {evaluationPending ? (
-            <span role="status" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,color:"#667085"}}><Loader2 size={14} className="animate-spin"/>正在评估当前应答逻辑…</span>
-          ) : (
-            <>
-              <button type="button" className="rl-eval-entry-button" onClick={beginDemoEvaluation}>查看四维评估</button>
-              <button type="button" className="rl-eval-entry-button" onClick={() => { void (async () => { if (validDemoEvaluation) { setDemoView("optimize"); return; } const evaluation = await runServerEvaluation(); if (evaluation) setDemoView("optimize"); })(); }}>生成优化应答逻辑</button>
-              {evaluationError && <span role="alert" style={{display:"inline-flex",alignItems:"center",gap:8,fontSize:12,color:"#b64d52"}}>{evaluationError}<button type="button" className="rl-text-button" onClick={beginDemoEvaluation}>重试</button></span>}
-            </>
-          )}
+          <button type="button" className="rl-eval-entry-button" onClick={beginDemoEvaluation}>查看四维评估</button>
+          <button type="button" className="rl-eval-entry-button" onClick={()=>setDemoView("optimize")}>生成优化应答逻辑</button>
         </div>
       )}
-      {showDemo && demoView === "evaluation" && validDemoEvaluation && (
-        <>
-          {evaluationPersisted === false && (
-            <p role="status" style={{margin:"0 0 10px",fontSize:12,color:"#a86722"}}>本次评估结果已生成，但尚未保存到服务器（评估历史存储待数据库迁移启用）；刷新后需重新评估。</p>
-          )}
-          <ResponseLogicEvaluationPanel evaluation={validDemoEvaluation} dataSourceLabel="服务端规则评估＋LLM 语义判断" judgePhase={judge.state.phase} judgeResult={judge.state.result} onBack={()=>setDemoView("detail")} onOptimize={()=>setDemoView("optimize")} onLocate={field=>locateLogicField(field, ()=>setDemoView("detail"))}/>
-        </>
+      {showDemo && demoView === "evaluation" && (
+        <ResponseLogicEvaluationPanel question={question.question} intent={question.intent ?? ""} judgePhase={judge.state.phase} judgeResult={judge.state.result} judgeError={judgeErrorText} dataSourceLabel="LLM 语义评估（异步模型任务）" onBack={()=>setDemoView("detail")} onOptimize={()=>setDemoView("optimize")} onRetry={()=>{void judge.start();}}/>
       )}
-      {showDemo && demoView === "optimize" && validDemoEvaluation && (
-        <ResponseLogicOptimizationWorkflow key={`${questionId}:${currentVersion}:${currentRevision}:${currentFingerprint}`} evaluation={validDemoEvaluation} logic={currentLogic} onBack={()=>setDemoView("evaluation")}/>
+      {showDemo && demoView === "optimize" && (
+        <ResponseLogicOptimizationWorkflow key={`${questionId}:${currentVersion}:${currentRevision}:${currentFingerprint}`} question={question.question} intent={question.intent ?? ""} contextKey={`${questionId}:${currentVersion}:${currentRevision}:${currentFingerprint}`} logic={currentLogic} onBack={()=>setDemoView("evaluation")}/>
       )}
-      {demoView !== "detail" && !validDemoEvaluation && (
+      {demoView === "evaluation" && judge.state.phase === "idle" && (
         <div className="rl-eval-entry" role="status">当前应答逻辑或版本已变化，评估结果已失效。<button type="button" className="rl-text-button" onClick={beginDemoEvaluation}>重新查看评估</button><button type="button" className="rl-text-button" onClick={()=>setDemoView("detail")}>返回应答逻辑编辑</button></div>
       )}
 

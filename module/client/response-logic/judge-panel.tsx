@@ -79,7 +79,7 @@ export function renderJudgeDimension(
   }
 }
 
-function JudgeRelevance({ data }: { data: JudgeOutput["dimensions"]["relevance"] }) {
+export function JudgeRelevance({ data }: { data: JudgeOutput["dimensions"]["relevance"] }) {
   return <div className="rl-judge-section">
     <div className="rl-judge-section-head">
       <span className="rl-judge-source-tag">LLM 语义判断</span>
@@ -90,7 +90,7 @@ function JudgeRelevance({ data }: { data: JudgeOutput["dimensions"]["relevance"]
   </div>;
 }
 
-function JudgeCompleteness({ data }: { data: JudgeOutput["dimensions"]["completeness"] }) {
+export function JudgeCompleteness({ data }: { data: JudgeOutput["dimensions"]["completeness"] }) {
   return <div className="rl-judge-section">
     <div className="rl-judge-section-head">
       <span className="rl-judge-source-tag">LLM 语义判断</span>
@@ -109,7 +109,7 @@ function JudgeCompleteness({ data }: { data: JudgeOutput["dimensions"]["complete
   </div>;
 }
 
-function JudgeActionability({ data }: { data: JudgeOutput["dimensions"]["actionability"] }) {
+export function JudgeActionability({ data }: { data: JudgeOutput["dimensions"]["actionability"] }) {
   return <div className="rl-judge-section">
     <div className="rl-judge-section-head">
       <span className="rl-judge-source-tag">LLM 语义判断</span>
@@ -131,7 +131,7 @@ function JudgeActionability({ data }: { data: JudgeOutput["dimensions"]["actiona
   </div>;
 }
 
-function JudgeBoundaryRisk({ data }: { data: JudgeOutput["dimensions"]["boundaryRisk"] }) {
+export function JudgeBoundaryRisk({ data }: { data: JudgeOutput["dimensions"]["boundaryRisk"] }) {
   return <div className="rl-judge-section">
     <div className="rl-judge-section-head">
       <span className="rl-judge-source-tag">LLM 语义判断</span>

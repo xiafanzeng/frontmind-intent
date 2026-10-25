@@ -1,7 +1,6 @@
 import {describe,expect,it} from "vitest";
 import {createElement} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
-import {ResponseLogicEvaluationPanel} from "../client/response-logic/evaluation-panel";
 import {ResponseLogicOptimizationWorkflow} from "../client/response-logic/optimization-workflow";
 import {buildDiagnosis,createDemoEvaluation,createDemoOptimization,fingerprintLogic,LOGIC_FIELDS} from "../client/response-logic/mock-evaluation";
 const logic={concern:"用户关注机构资质与真实性，担心选错服务商，希望有可核验的判断标准",conclusion:"先核验资质与授权，再对比服务范围与成功案例，最后按适用条件收敛选择。",facts:"资质证书：见官网公示\n授权文件：知识库文档\n案例记录：项目记录可回溯",boundaries:"不使用绝对化承诺；排名表述必须给出样本范围与时间。"};
@@ -75,37 +74,13 @@ describe("Response Logic frontend-sample evaluation",()=>{
   const ids=new Set(diagnoses.map(item=>item.id));
   expect(ids.size).toBe(diagnoses.length);
  });
- it("renders the diagnosis panel with expandable items and locate buttons",()=>{
-  const markup=renderToStaticMarkup(createElement(ResponseLogicEvaluationPanel,{evaluation:createDemoEvaluation(input),onBack:()=>{},onOptimize:()=>{},onLocate:()=>{}}));
-  expect(markup).toContain("诊断摘要");
-  expect(markup).toContain("定位到对应内容");
-  expect(markup).toContain("问题原因");
-  expect(markup).toContain("修改建议");
-  expect(markup).toContain("rl-dx-item");
-  expect(markup).toContain("项待处理");
- });
- it("renders four metric cards, matrix and one concise data-source note (no demo banner)",()=>{
-  const markup=renderToStaticMarkup(createElement(ResponseLogicEvaluationPanel,{evaluation:createDemoEvaluation(input),onBack:()=>{},onOptimize:()=>{}}));
-  for(const title of ["回答相关性","完整性","可执行性","边界与风险控制"]){expect(markup).toContain(title);}
-  expect(markup).toContain("rl-eval-layout");
-  expect(markup).toContain("rl-eval-diagnosis");
-  expect((markup.match(/rl-cov-item/g)||[]).length).toBeGreaterThanOrEqual(4);
-  expect((markup.match(/rl-eval-table-scroll/g)||[]).length).toBe(0);
-  expect((markup.match(/评估规则介绍/g)||[]).length).toBe(4);
-  expect((markup.match(/查看详情/g)||[]).length).toBe(4);
-  expect(markup).toContain("覆盖情况");
-  expect(markup).toContain("判断依据");
-  expect(markup).not.toContain('class="rl-eval-matrix');
-  expect(markup).toContain("本地预览示例数据");
-  expect(markup).not.toContain("演示评估（未接真实后端）");
-  expect(markup).not.toContain("模拟结果");
- });
+ // The formal report panel itself is judge-only and covered by
+ // response-logic-judge-report.test.ts; the rule engine stays internal.
  it("renders selectable actions, editable draft and a local-preview adopt control",()=>{
-  const markup=renderToStaticMarkup(createElement(ResponseLogicOptimizationWorkflow,{evaluation:createDemoEvaluation(input),logic,onBack:()=>{}}));
+  const markup=renderToStaticMarkup(createElement(ResponseLogicOptimizationWorkflow,{question:input.question,intent:input.intent,contextKey:`${input.questionId}:${input.revision}`,logic,onBack:()=>{}}));
   expect((markup.match(/type="checkbox"/g)||[]).length).toBe(4);
   expect(markup).toContain("rl-opt-layout");
   expect(markup).toContain("采用（本地预览）");
-  expect(markup).not.toContain("采用并保存（需后端支持后启用）");
   expect(markup).toContain("修改前");
   expect(markup).toContain("修改后");
   expect(markup).not.toContain("演示");

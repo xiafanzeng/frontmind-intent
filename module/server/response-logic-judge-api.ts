@@ -1,10 +1,8 @@
 import { createHash } from "node:crypto";
 import { Router, type Response } from "express";
 import { z } from "zod";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import {
-  RULE_EVALUATION_VERSION,
-  createResponseLogicRuleEvaluation,
   fingerprintLogic,
   type LogicSections,
 } from "../contracts/response-logic-evaluation.js";
@@ -132,18 +130,45 @@ function judgeIdempotencyKey(input: {
  * Input construction
  * ------------------------------------------------------------------------- */
 
-async function buildJudgeSkillArchive() {
-  const skillDirectoryCandidates = [
+const configuredJudgeSkillPath =
+  process.env.FRONTMIND_RESPONSE_LOGIC_JUDGE_SKILL_PATH?.trim();
+if (configuredJudgeSkillPath && !isAbsolute(configuredJudgeSkillPath)) {
+  throw new Error("FRONTMIND_RESPONSE_LOGIC_JUDGE_SKILL_PATH must be an absolute path");
+}
+
+/**
+ * Candidate directories for the evaluator Skill, in priority order — same
+ * semantics as the builder/brand Skill paths (FRONTMIND_*_SKILL_PATH must be
+ * absolute and, when set, is the ONLY candidate so a bad value fails loudly
+ * instead of silently loading another copy).
+ */
+export function judgeSkillDirectoryCandidates(configuredPath: string | undefined): string[] {
+  if (configuredPath) return [configuredPath];
+  return [
     join(import.meta.dirname, "../workflows/response-logic-evaluator.skill"),
     join(process.cwd(), "modules/intent/workflows/response-logic-evaluator.skill"),
     join(process.cwd(), "private-workflows/response-logic-evaluator.skill"),
+    // Assembled runtime images run from /app/apps/dashboard while the module
+    // checkout (including module/workflows) lives under /app/module-build.
+    resolve(process.cwd(), "../../module-build/module/workflows/response-logic-evaluator.skill"),
   ];
-  return buildDirectorySkillArchive({
-    name: "response-logic-evaluator",
-    version: "1",
-    directoryCandidates: skillDirectoryCandidates,
-    files: ["SKILL.md", "references/output-contract.md", "references/rubric.md"],
-  });
+}
+
+async function buildJudgeSkillArchive(configuredPath: string | undefined = configuredJudgeSkillPath) {
+  const skillDirectoryCandidates = judgeSkillDirectoryCandidates(configuredPath);
+  try {
+    return await buildDirectorySkillArchive({
+      name: "response-logic-evaluator",
+      version: "1",
+      directoryCandidates: skillDirectoryCandidates,
+      files: ["SKILL.md", "references/output-contract.md", "references/rubric.md"],
+    });
+  } catch (error) {
+    throw new Error(
+      `Could not load Skill response-logic-evaluator (tried: ${skillDirectoryCandidates.join("; ")})`,
+      { cause: error },
+    );
+  }
 }
 
 type JudgeTurnInput = {
@@ -151,7 +176,6 @@ type JudgeTurnInput = {
   question: string;
   intent: string;
   record: ResponseLogicRecordDto;
-  ruleEvaluation: ReturnType<typeof createResponseLogicRuleEvaluation>;
   knowledgeSnapshot: KnowledgeSnapshotForJudge;
   evidenceFilename: string | null;
   skillFilename: string;
@@ -198,7 +222,6 @@ async function buildJudgeTurnInputArchive(
                   restriction:
                     "知识库不可用。不得编造企业事实；知识相关判断标记 evidenceConfidence 为 unverifiable。",
                 },
-            ruleEvaluation: input.ruleEvaluation,
             outputContract: {
               format: "manus_v2_structured_output",
               requiredFields: ["payload"],
@@ -226,7 +249,7 @@ function buildJudgePrompt(input: {
     ? `解压并读取附件 ${input.evidenceFilename} 中的 knowledge.md，仅可引用其中实际存在的企业事实和材料路径。`
     : "知识库不可用。不得编造企业事实；知识相关判断标记 evidenceConfidence 为 unverifiable。";
   return `严格执行首次任务附件 ${input.skillFilename}；先解压并完整读取 SKILL.md、references/output-contract.md 和 references/rubric.md。
-必须解压附件 ${input.turnInputFilename} 并完整读取 turn-input.json。它是当前问题、草稿、知识库身份、规则评估参考与输出约束的唯一服务端权威输入。
+必须解压附件 ${input.turnInputFilename} 并完整读取 turn-input.json。它是当前问题、草稿、知识库身份与输出约束的唯一服务端权威输入。
 ${evidenceInstruction}
 按照 turn-input.json 中 outputContract 的要求，对 currentDraft 的四个维度进行语义质量评估。把完整评估结果序列化为严格 JSON，装入 v2 structured output 的 payload 字符串字段。四维 key 分别为 relevance、completeness、actionability、boundaryRisk。不输出综合分数。`;
 }
@@ -493,16 +516,9 @@ export function createResponseLogicJudgeRouter(core: EvaluationCore): import("ex
         return;
       }
 
-      // Rule evaluation as reference input for the Judge
+      // Question text/intent for the Judge turn-input (the LLM is the sole
+      // formal scorer — the rule engine never feeds this request).
       const configuredQuestion = await core.getDashboardQuestion(workspaceUserId, parsed.data.questionId);
-      const ruleEvaluation = createResponseLogicRuleEvaluation({
-        questionId: record.questionId,
-        question: record.question,
-        intent: record.intent,
-        version: record.confirmed?.version ?? null,
-        revision: record.revision,
-        logic,
-      });
 
       // Knowledge snapshot
       const knowledgeSnapshot = await core.getLatestKnowledgeSnapshot(workspaceUserId);
@@ -538,7 +554,6 @@ export function createResponseLogicJudgeRouter(core: EvaluationCore): import("ex
         question: configuredQuestion?.question ?? record.question,
         intent: configuredQuestion?.intent ?? record.intent,
         record,
-        ruleEvaluation,
         knowledgeSnapshot,
         evidenceFilename: evidenceUploadFilename,
         skillFilename,
@@ -650,7 +665,6 @@ export function createResponseLogicJudgeRouter(core: EvaluationCore): import("ex
         recordRevision: record.revision,
         sourceFingerprint: fingerprint,
         knowledgeFingerprint,
-        ruleVersion: RULE_EVALUATION_VERSION,
         judgeVersion: "1",
       });
     } catch (error) {
