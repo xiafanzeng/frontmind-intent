@@ -6,75 +6,37 @@ import {
   JudgeRequestError,
 } from "./response-logic-judge-client.js";
 import type { JudgeOutput } from "../contracts/response-logic-judge.js";
+import {
+  createTaskLifecycleReducer,
+  initialTaskLifecycleState,
+  taskStartBlocked,
+  type TaskLifecycleEvent,
+  type TaskLifecycleState,
+  type TaskPhase,
+} from "./task-lifecycle.js";
 
-export type JudgePhase = "idle" | "starting" | "running" | "completed" | "failed";
+export type JudgePhase = TaskPhase;
 
-export type JudgeState = {
-  phase: JudgePhase;
-  result: JudgeOutput | null;
-  error: string;
-  errorCode: string;
-  taskId: string | null;
-};
+export type JudgeState = Omit<TaskLifecycleState<JudgeOutput>, "activeContext">;
 
 /** JudgeState bound to the context (questionId + revision + fingerprint) it belongs to. */
-export type JudgeLifecycleState = JudgeState & { activeContext: string };
+export type JudgeLifecycleState = TaskLifecycleState<JudgeOutput>;
 
-export type JudgeLifecycleEvent =
-  | { type: "context-change"; contextKey: string }
-  | { type: "start"; contextKey: string }
-  | { type: "start-succeeded"; taskId: string; contextKey: string }
-  | { type: "start-failed"; message: string; code: string; contextKey: string }
-  | { type: "poll-completed"; result: JudgeOutput; contextKey: string }
-  | { type: "poll-failed"; message: string; code: string; contextKey: string }
-  | { type: "timeout"; contextKey: string }
-  | { type: "reset" };
+export type JudgeLifecycleEvent = TaskLifecycleEvent<JudgeOutput>;
 
-const initialState: JudgeState = { phase: "idle", result: null, error: "", errorCode: "", taskId: null };
+export const initialJudgeLifecycleState: JudgeLifecycleState = initialTaskLifecycleState<JudgeOutput>();
 
-export const initialJudgeLifecycleState: JudgeLifecycleState = { ...initialState, activeContext: "" };
-
-/** True while a start request must not be issued again (task already in flight). */
-export function judgeStartBlocked(phase: JudgePhase): boolean {
-  return phase === "starting" || phase === "running";
-}
+/** Backwards-compatible alias; the judge start guard is the shared one. */
+export const judgeStartBlocked = taskStartBlocked;
 
 /**
- * Pure lifecycle state machine for the judge evaluation. Every asynchronous
- * completion carries the context key it was started under; the reducer drops
- * results whose context no longer matches, so stale tasks (switched question,
- * edited draft → new fingerprint/revision) never pollute the current view.
+ * Pure lifecycle state machine for the judge evaluation — one shared machine
+ * (task-lifecycle.ts) for judge and optimizer, instantiated per flow.
  */
-export function judgeEvaluationReducer(
-  state: JudgeLifecycleState,
-  event: JudgeLifecycleEvent,
-): JudgeLifecycleState {
-  switch (event.type) {
-    case "context-change":
-      if (event.contextKey === state.activeContext) return state;
-      return { ...initialJudgeLifecycleState, activeContext: event.contextKey };
-    case "start":
-      if (judgeStartBlocked(state.phase)) return state;
-      return { ...initialJudgeLifecycleState, phase: "starting", activeContext: event.contextKey };
-    case "start-succeeded":
-      if (event.contextKey !== state.activeContext || state.phase !== "starting") return state;
-      return { ...state, phase: "running", taskId: event.taskId };
-    case "start-failed":
-      if (event.contextKey !== state.activeContext) return state;
-      return { ...state, phase: "failed", error: event.message, errorCode: event.code };
-    case "poll-completed":
-      if (event.contextKey !== state.activeContext) return state;
-      return { ...state, phase: "completed", result: event.result, error: "", errorCode: "" };
-    case "poll-failed":
-      if (event.contextKey !== state.activeContext) return state;
-      return { ...state, phase: "failed", error: event.message, errorCode: event.code };
-    case "timeout":
-      if (event.contextKey !== state.activeContext) return state;
-      return { ...state, phase: "failed", error: "Judge 评估超时（轮询次数达到上限）", errorCode: "JUDGE_TIMEOUT" };
-    case "reset":
-      return { ...initialState, activeContext: state.activeContext };
-  }
-}
+export const judgeEvaluationReducer = createTaskLifecycleReducer<JudgeOutput>({
+  timeoutCode: "JUDGE_TIMEOUT",
+  timeoutMessage: "Judge 评估超时（轮询次数达到上限）",
+});
 
 const POLL_INTERVAL_MS = 3000;
 const MAX_POLL_ATTEMPTS = 100; // ~5 minutes

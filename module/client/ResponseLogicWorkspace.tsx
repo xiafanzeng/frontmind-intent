@@ -55,6 +55,7 @@ import {ResponseLogicEvaluationPanel} from "./response-logic/evaluation-panel.js
 import {ResponseLogicOptimizationWorkflow} from "./response-logic/optimization-workflow.js";
 import {fingerprintLogic, type LogicSections} from "./response-logic/mock-evaluation.js";
 import {useJudgeEvaluation} from "./use-judge-evaluation.js";
+import {useOptimizationGeneration} from "./use-optimization-generation.js";
 import {
   parseResponseLogicReply as parseResponseLogicReplyCore,
   getResponseLogicPollDelay as getResponseLogicPollDelayCore,
@@ -980,7 +981,6 @@ function PreviewResponseLogicEditor({
   const [demoView, setDemoView] = useState<"detail"|"evaluation"|"optimize">("detail");
   if (!entry) return <ResponseLogicMissingQuestionState />;
   const previewLogic: LogicSections = {concern:draft.concern,conclusion:draft.conclusion,facts:draft.facts,boundaries:draft.boundaries};
-  const previewFingerprint = fingerprintLogic(previewLogic);
   const showDemo = Boolean(draft.concern.trim() || draft.conclusion.trim() || draft.facts.trim() || draft.boundaries.trim());
   // Local preview has no server connection: the formal LLM evaluation is not
   // available here, so the evaluation view explains that instead of faking one.
@@ -998,7 +998,7 @@ function PreviewResponseLogicEditor({
         <div className="rl-eval-entry" role="status" style={{margin:"18px 0"}}>本地预览模式未连接服务器，LLM 语义评估不可用；请在正式环境中查看四维评估。<button type="button" className="rl-text-button" onClick={()=>setDemoView("detail")}>返回应答逻辑编辑</button></div>
       )}
       {showDemo && demoView === "optimize" && (
-        <ResponseLogicOptimizationWorkflow key={`${questionId}:preview:${previewFingerprint}`} question={entry.question.question} intent={entry.question.intent ?? ""} contextKey={`${questionId}:preview:${previewFingerprint}`} logic={previewLogic} onBack={()=>setDemoView("evaluation")}/>
+        <div className="rl-eval-entry" role="status" style={{margin:"18px 0"}}>本地预览模式未连接服务器，LLM 优化不可用；请在正式环境中完成四维评估后使用优化。<button type="button" className="rl-text-button" onClick={()=>setDemoView("detail")}>返回应答逻辑编辑</button></div>
       )}
 
       {demoView === "detail" && <LogicEditorCard
@@ -1798,6 +1798,19 @@ function ResponseLogicQuestionEditor({
   const judgeErrorText = judge.state.phase === "failed"
     ? [judge.state.error, judge.state.errorCode].filter(Boolean).join(" · ") || undefined
     : undefined;
+  // LLM optimization of the current draft, bound to the completed judge task.
+  // Context = question + revision + draft fingerprint + judgeTaskId, so a
+  // candidate can never be adopted into a changed draft.
+  const optimization = useOptimizationGeneration({
+    questionId,
+    recordRevision: currentRevision,
+    sourceFingerprint: currentFingerprint,
+    judgeTaskId: judge.state.phase === "completed" && judge.state.taskId ? judge.state.taskId : "",
+  });
+  const adoptOptimizationPatch = (patch: Partial<LogicSections>) => {
+    patchDraft(patch);
+    setDemoView("detail");
+  };
 
   const showGenerationProcess =
     generating ||
@@ -1923,7 +1936,7 @@ function ResponseLogicQuestionEditor({
         <ResponseLogicEvaluationPanel question={question.question} intent={question.intent ?? ""} judgePhase={judge.state.phase} judgeResult={judge.state.result} judgeError={judgeErrorText} dataSourceLabel="LLM 语义评估（异步模型任务）" onBack={()=>setDemoView("detail")} onOptimize={()=>setDemoView("optimize")} onRetry={()=>{void judge.start();}}/>
       )}
       {showDemo && demoView === "optimize" && (
-        <ResponseLogicOptimizationWorkflow key={`${questionId}:${currentVersion}:${currentRevision}:${currentFingerprint}`} question={question.question} intent={question.intent ?? ""} contextKey={`${questionId}:${currentVersion}:${currentRevision}:${currentFingerprint}`} logic={currentLogic} onBack={()=>setDemoView("evaluation")}/>
+        <ResponseLogicOptimizationWorkflow key={`${questionId}:${currentVersion}:${currentRevision}:${currentFingerprint}`} question={question.question} intent={question.intent ?? ""} logic={currentLogic} judgeTaskId={judge.state.phase === "completed" && judge.state.taskId ? judge.state.taskId : ""} optimization={optimization} onAdopt={adoptOptimizationPatch} onBack={()=>setDemoView("evaluation")}/>
       )}
       {demoView === "evaluation" && judge.state.phase === "idle" && (
         <div className="rl-eval-entry" role="status">当前应答逻辑或版本已变化，评估结果已失效。<button type="button" className="rl-text-button" onClick={beginDemoEvaluation}>重新查看评估</button><button type="button" className="rl-text-button" onClick={()=>setDemoView("detail")}>返回应答逻辑编辑</button></div>

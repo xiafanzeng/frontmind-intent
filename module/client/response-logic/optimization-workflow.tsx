@@ -1,71 +1,131 @@
 import {useEffect,useMemo,useState} from "react";
-import type {LogicField,LogicSections} from "./mock-evaluation.js";
-import {createDemoOptimization,LOGIC_FIELDS} from "./mock-evaluation.js";
+import type {LogicField,LogicSections} from "../../contracts/response-logic-evaluation.js";
+import {LOGIC_FIELDS} from "../../contracts/response-logic-evaluation.js";
+import type {OptimizationOutput,OptimizationChange} from "../../contracts/response-logic-optimization.js";
 import {WorkbenchSteps} from "./workbench-parts.js";
+import type {OptimizationState} from "../use-optimization-generation.js";
 import "./evaluation.css";
 
 function allSelected():Record<LogicField,boolean>{return {concern:true,conclusion:true,facts:true,boundaries:true};}
-function proposalText(logic:LogicSections,context:{question:string;intent:string}){return Object.fromEntries(createDemoOptimization(logic,context).sections.map(item=>[item.field,item.after])) as LogicSections;}
 
 /**
- * Module-scoped memory cache for the in-progress optimization draft. It keeps the
- * draft across question/tab switches within the session (no silent loss) while
- * staying memory-only: a page refresh clears it and nothing ever reaches the
- * server, the stash queue or the real record draft.
+ * Pure adoption decision: only the sections the user explicitly selected,
+ * using their (possibly hand-edited) candidate text. Sections the user did
+ * not select are NOT included, so the existing draft keeps its own content.
  */
-type OptimizationDraftState = {edited:LogicSections;accepted:Record<LogicField,boolean>;adopted:boolean};
-const optimizationDraftCache = new Map<string,OptimizationDraftState>();
+export function buildAdoptionPatch(result:OptimizationOutput,accepted:Record<LogicField,boolean>,edited:LogicSections):Partial<LogicSections>{
+  const patch:Partial<LogicSections>={};
+  for(const {field} of LOGIC_FIELDS){
+    if(!accepted[field])continue;
+    patch[field]=edited[field];
+  }
+  return patch;
+}
 
+const EVIDENCE_SOURCE_TEXT:Record<string,string>={draft:"草稿原文",knowledge:"知识材料"};
 
-/** No save, business requests, persistence queue, or model invocation. Adoption only flips local preview state. */
-export function ResponseLogicOptimizationWorkflow({question,intent,contextKey,logic,onBack}:{question:string;intent:string;contextKey:string;logic:LogicSections;onBack:()=>void}){
-  const proposal=useMemo(()=>createDemoOptimization(logic,{question,intent}),[logic,question,intent]);
-  const key=contextKey;
-  const restored=optimizationDraftCache.get(key);
-  const [edited,setEdited]=useState<LogicSections>(()=>restored?.edited ?? proposalText(logic,{question,intent}));
-  const [accepted,setAccepted]=useState<Record<LogicField,boolean>>(()=>restored?.accepted ?? allSelected());
-  const [adopted,setAdopted]=useState<boolean>(()=>restored?.adopted ?? false);
-  const [selected,setSelected]=useState<LogicField>("concern");
-  const [compare,setCompare]=useState(false);
-  const [revision,setRevision]=useState(0);
-  const dirty=!adopted&&proposal.sections.some(item=>edited[item.field]!==item.after||!accepted[item.field]);
-  const count=LOGIC_FIELDS.filter(item=>accepted[item.field]).length;
-  useEffect(()=>{optimizationDraftCache.set(key,{edited,accepted,adopted});},[key,edited,accepted,adopted]);
+/**
+ * LLM optimization flow: generate a candidate from the verified judge
+ * diagnosis (server-side), review the per-change reasons and evidence, edit
+ * or deselect sections, then ADOPT the selection into the editor draft via
+ * the caller-provided onAdopt — which must go through the existing
+ * patchDraft/stash pipeline. Nothing here publishes or writes the server
+ * record directly, and no heuristic/demo content is ever shown as an LLM
+ * candidate.
+ */
+export function ResponseLogicOptimizationWorkflow({question,intent,logic,judgeTaskId,optimization,onAdopt,onBack}:{question:string;intent:string;logic:LogicSections;judgeTaskId:string;optimization:{state:OptimizationState;start:()=>Promise<void>;reset:()=>void};onAdopt:(patch:Partial<LogicSections>)=>void;onBack:()=>void}){
+  const result=optimization.state.result;
+  const [edited,setEdited]=useState<LogicSections|null>(null);
+  const [accepted,setAccepted]=useState<Record<LogicField,boolean>>(allSelected());
+
+  // Bind the editable copy to the CURRENT candidate only; a new candidate
+  // (fresh generation after reset) starts from the model's proposal again.
+  useEffect(()=>{
+    if(result)setEdited(result.optimizedDraft);
+  },[result]);
+  const effectiveEdited=edited??(result?result.optimizedDraft:logic);
+  const hasCandidate=optimization.state.phase==="completed"&&result!==null;
+  const dirty=hasCandidate&&result&&LOGIC_FIELDS.some(({field})=>effectiveEdited[field]!==result.optimizedDraft[field]||!accepted[field]);
   useEffect(()=>{if(!dirty)return;const guard=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue="";};window.addEventListener("beforeunload",guard);return()=>window.removeEventListener("beforeunload",guard);},[dirty]);
-  const permitLeave=()=>!dirty||window.confirm("当前优化方案有未保存的修改，离开后将丢失。确认离开？");
-  const reset=()=>{if(!permitLeave())return;setEdited(proposalText(logic,{question,intent}));setAccepted(allSelected());setAdopted(false);setCompare(false);setRevision(n=>n+1);};
-  const patchDraft=(next:Partial<OptimizationDraftState>)=>{if(next.edited!==undefined)setEdited(next.edited);if(next.accepted!==undefined)setAccepted(next.accepted);if(next.adopted!==undefined)setAdopted(next.adopted);};
-  const active=proposal.sections.find(item=>item.field===selected)!;
-  const displayAfter=(field:LogicField)=>accepted[field]?edited[field]:logic[field];
+
+  const changesByField=useMemo(()=>{
+    const map=new Map<LogicField,OptimizationChange[]>();
+    if(!result)return map;
+    for(const change of result.changes){
+      const list=map.get(change.field)??[];
+      list.push(change);
+      map.set(change.field,list);
+    }
+    return map;
+  },[result]);
+
+  const adopt=()=>{
+    if(!result)return;
+    onAdopt(buildAdoptionPatch(result,accepted,effectiveEdited));
+  };
+  const startGeneration=()=>{void optimization.start();};
+
   return <section className="rl-eval-root" aria-label="优化应答逻辑">
-    <div className="rl-eval-back"><button type="button" className="rl-eval-back-button" onClick={()=>{if(permitLeave())onBack();}}>← 返回评估详情</button></div>
-    <header className="rl-eval-heading"><div><h2>{adopted?"优化方案已采用（本地预览）":"确认优化方案"}</h2><p>{question} · 选择需要采纳的动作，查看并编辑具体内容变更；采用仅更新本地预览状态。</p></div></header>
-    <WorkbenchSteps step={adopted?3:2}/>
-    {adopted?<div className="rl-opt-adopted rl-eval-card" role="status">
-        <h3>已采用为本地预览版本 <span className="rl-eval-tag supported">本地预览 · 未保存到服务器</span></h3>
-        <p>以下为采用后的四部分预览内容（未采纳部分保留原文）。当前页面仍在使用服务器上的正式应答逻辑；此状态仅存在于当前浏览器会话，刷新后清空。</p>
-        <div className="rl-opt-compare">{proposal.sections.map(item=><section className="rl-opt-compare-row" key={item.field}><h3>{item.label}<span className={`rl-eval-tag ${accepted[item.field]?"supported":"partial"}`}>{accepted[item.field]?"已采用":"未采纳（保留原文）"}</span></h3><div className="rl-opt-compare-pair"><div className="rl-opt-before"><b>原文</b><p>{item.before||"（暂无内容）"}</p></div><div className="rl-opt-after"><b>采用后（本地预览）</b><p>{displayAfter(item.field)||"（暂无内容）"}</p></div></div></section>)}</div>
-        <div className="rl-opt-adopted-actions"><button type="button" className="rl-eval-outline" onClick={()=>setAdopted(false)}>撤销采用并继续编辑</button><button type="button" className="rl-eval-primary" onClick={()=>{if(permitLeave())onBack();}}>返回评估详情</button></div>
+    <div className="rl-eval-back"><button type="button" className="rl-eval-back-button" onClick={onBack}>← 返回评估详情</button></div>
+    <header className="rl-eval-heading"><div><h2>优化应答逻辑</h2><p>{question}{intent?` · Intent：${intent}`:""} · 优化基于已完成的 LLM 四维评估，生成候选版本供人工审阅与逐栏采用。</p></div></header>
+    <WorkbenchSteps step={2}/>
+
+    {optimization.state.phase==="idle"&&!judgeTaskId&&<div className="rl-opt-toolbar rl-eval-card" role="status">
+      <h3>尚无可用的评估结果</h3>
+      <p className="rl-eval-score-description">优化必须基于当前内容的 LLM 四维评估。请先返回评估页完成「查看四维评估」，再回来生成优化版本。</p>
+    </div>}
+
+    {optimization.state.phase==="idle"&&judgeTaskId&&<div className="rl-opt-toolbar rl-eval-card">
+      <p className="rl-eval-score-description">将以当前四栏草稿为输入，结合已完成的 Judge 评估结论与企业知识材料，由 LLM 生成优化候选版本。生成后可逐栏审阅、编辑并选择采用哪些栏目。</p>
+      <div className="rl-eval-action-buttons"><button type="button" className="rl-eval-primary" onClick={startGeneration}>生成优化版本</button></div>
+    </div>}
+
+    {(optimization.state.phase==="starting"||optimization.state.phase==="running")&&<div className="rl-opt-toolbar rl-eval-card" role="status">
+      <h3>正在生成优化版本…</h3>
+      <p className="rl-eval-score-description">模型正在基于评估结论优化当前草稿，通常需要 1–3 分钟。请勿离开本页。</p>
+      <div className="rl-eval-action-buttons"><button type="button" className="rl-eval-outline" disabled aria-disabled>生成中…</button></div>
+    </div>}
+
+    {optimization.state.phase==="failed"&&<div className="rl-opt-toolbar rl-eval-card" role="alert">
+      <h3>优化未完成</h3>
+      <p className="rl-eval-score-description">{[optimization.state.error,optimization.state.errorCode].filter(Boolean).join(" · ")||"优化任务失败"}。可重试；若提示评估结果不可用或上下文不一致，请先重新进行四维评估。</p>
+      <div className="rl-eval-action-buttons">
+        <button type="button" className="rl-eval-primary" onClick={startGeneration}>重新生成</button>
+        <button type="button" className="rl-eval-outline" onClick={optimization.reset}>放弃本次优化</button>
       </div>
-    :<><div className="rl-opt-toolbar"><span className="rl-eval-tag partial">优化建议为本地启发式生成；采用后建议重新进行 LLM 语义评估验证</span><button type="button" className="rl-eval-outline" onClick={reset}>重新生成建议</button><button type="button" className="rl-eval-outline" onClick={()=>setCompare(v=>!v)}>{compare?"返回方案编辑":"查看前后对比"}</button></div>
-    {compare?<div className="rl-opt-compare" aria-label="优化前后对比">{proposal.sections.map(item=><section className="rl-opt-compare-row" key={item.field}><h3>{item.label}<span className={`rl-eval-tag ${accepted[item.field]?"supported":"partial"}`}>{accepted[item.field]?"已选择":"本项未采纳"}</span></h3><div className="rl-opt-compare-pair"><div className="rl-opt-before"><b>修改前</b><p>{item.before||"（暂无内容）"}</p></div><div className="rl-opt-after"><b>修改后（本地预览）</b><p>{displayAfter(item.field)||"（暂无内容）"}</p></div></div><p className="rl-opt-compare-reason">{item.reason}</p><p className="rl-eval-evidence">对应解决：{item.resolvedIssues.join("；")||"无"} · 仍需解决：{item.remainingIssues.join("；")}</p></section>)}</div>
-      :<div className="rl-opt-layout">
-        <nav className="rl-opt-menu rl-eval-card" aria-label="优化建议清单">
-          <h3>优化建议 <small>选择 {count} / 4 项</small></h3>
-          {proposal.sections.map(item=><section className={`rl-opt-task ${accepted[item.field]?"selected":""} ${selected===item.field?"is-active":""}`} key={item.field}>
-            <label><input type="checkbox" checked={accepted[item.field]} aria-label={`采纳${item.label}`} onChange={event=>patchDraft({accepted:{...accepted,[item.field]:event.target.checked}})}/><b>{item.label}</b><span className="rl-eval-tag">建议</span></label>
-            <p>{item.reason}</p><div className="rl-opt-task-actions"><button type="button" onClick={()=>setSelected(item.field)}>查看并编辑</button><button type="button" onClick={()=>patchDraft({accepted:{...accepted,[item.field]:false}})}>不采纳</button></div>
-          </section>)}
-        </nav>
-        <section className="rl-opt-editor rl-eval-card"><h3>{active.label}<span className="rl-eval-tag">{accepted[selected]?"可编辑":"未采纳"}</span></h3>
-          <div className="rl-opt-editor-body"><p className="rl-opt-evidence">{question} · {active.reason}</p>
-            <div className="rl-opt-before"><b>修改前</b><p>{active.before||"（暂无内容）"}</p></div>
-            <div className="rl-opt-after"><label htmlFor={`rl-opt-edit-${selected}`}>修改后（本地草稿）</label><textarea id={`rl-opt-edit-${selected}`} aria-label={`${active.label}修改后`} rows={10} disabled={!accepted[selected]} value={edited[selected]} onChange={event=>patchDraft({edited:{...edited,[selected]:event.target.value}})}/></div>
-            {!accepted[selected]&&<p className="rl-opt-unselected-note">此项未采纳，采用后将保留原文。勾选后可以继续编辑。</p>}
-            <div className="rl-opt-issues"><b>对应解决</b><ul>{active.resolvedIssues.map((issue,i)=><li key={i}>{issue}</li>)}</ul><b>仍需解决</b><ul>{active.remainingIssues.map((issue,i)=><li key={i}>{issue}</li>)}</ul></div>
-          </div>
-        </section>
-      </div>}
-    <div className="rl-eval-actions"><span>已选 <strong>{count}</strong> 项 · {dirty?"方案有未保存的修改，离开时需要确认":adopted?"已采用（本地预览）":"本地预览状态，刷新即清空"}{revision>0?` · 重新生成 ${revision} 次`:""}</span><div className="rl-eval-action-buttons"><button type="button" className="rl-eval-outline" onClick={()=>{if(permitLeave())onBack();}}>取消修改</button><button type="button" className="rl-eval-primary" disabled={count===0} onClick={()=>setAdopted(true)}>采用（本地预览）</button></div></div></>}
+    </div>}
+
+    {hasCandidate&&result&&<><div className="rl-opt-toolbar">
+      <span className="rl-eval-tag supported">LLM 优化候选 · 未写入正式内容</span>
+      <button type="button" className="rl-eval-outline" onClick={()=>setEdited(result.optimizedDraft)}>恢复模型建议</button>
+      <button type="button" className="rl-eval-outline" onClick={optimization.reset}>放弃候选</button>
+    </div>
+    <div className="rl-opt-layout">
+      <div className="rl-opt-main">
+        <section className="rl-eval-card" aria-label="优化摘要"><h3>优化摘要</h3><p className="rl-eval-score-description">{result.summary}</p></section>
+        {LOGIC_FIELDS.map(({field,title:label})=>{
+          const fieldChanges=changesByField.get(field)??[];
+          const changed=result.optimizedDraft[field]!==logic[field];
+          return <section className={`rl-opt-task ${accepted[field]?"selected":""}`} key={field}>
+            <label><input type="checkbox" checked={accepted[field]} aria-label={`采用${label}`} onChange={event=>setAccepted({...accepted,[field]:event.target.checked})}/><b>{label}</b><span className={`rl-eval-tag ${changed?"partial":"neutral"}`}>{changed?"有修改":"保持原文"}</span></label>
+            <div className="rl-opt-compare-pair"><div className="rl-opt-before"><b>原文</b><p>{logic[field]||"（暂无内容）"}</p></div><div className="rl-opt-after"><b>优化候选（可编辑）</b><textarea value={effectiveEdited[field]} aria-label={`编辑${label}`} onChange={event=>setEdited({...effectiveEdited,[field]:event.target.value})} rows={Math.max(3,Math.min(12,Math.ceil((effectiveEdited[field].length||1)/28)))}/></div></div>
+            {fieldChanges.map((change,index)=><div className="rl-opt-issue" key={index}>
+              <p className="rl-opt-evidence"><b>修改原因</b>{change.summary}</p>
+              {change.evidence.map((evidence,eIndex)=><p className="rl-judge-evidence" key={eIndex}>「{evidence.excerpt}」<span className="rl-eval-tag neutral">{EVIDENCE_SOURCE_TEXT[evidence.source]??evidence.source}</span> — {evidence.supports}</p>)}
+            </div>)}
+          </section>;
+        })}
+      </div>
+      <aside className="rl-opt-menu rl-eval-card" aria-label="采用确认">
+        <h3>采用到草稿 <small>已选 {LOGIC_FIELDS.filter(({field})=>accepted[field]).length} / 4 项</small></h3>
+        <p className="rl-eval-score-description">仅把你勾选的栏目写入当前编辑器草稿（未勾选栏目保留原文）；写入后仍需经现有草稿保存与发布流程，不会自动发布。</p>
+        <div className="rl-eval-action-buttons">
+          <button type="button" className="rl-eval-primary" onClick={adopt}>采用选中项到草稿</button>
+          <button type="button" className="rl-eval-outline" onClick={optimization.reset}>放弃候选</button>
+        </div>
+      </aside>
+    </div>
+    <div className="rl-eval-actions"><span>优化建议需人工审核后采用；采用仅写入编辑器草稿，不直接写入服务器正式内容。</span><button type="button" className="rl-eval-outline" onClick={onBack}>返回评估详情</button></div>
+    </>}
   </section>;
 }

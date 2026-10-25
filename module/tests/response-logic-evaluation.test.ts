@@ -1,7 +1,6 @@
 import {describe,expect,it} from "vitest";
 import {createElement} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
-import {ResponseLogicOptimizationWorkflow} from "../client/response-logic/optimization-workflow";
 import {buildDiagnosis,createDemoEvaluation,createDemoOptimization,fingerprintLogic,LOGIC_FIELDS} from "../client/response-logic/mock-evaluation";
 const logic={concern:"用户关注机构资质与真实性，担心选错服务商，希望有可核验的判断标准",conclusion:"先核验资质与授权，再对比服务范围与成功案例，最后按适用条件收敛选择。",facts:"资质证书：见官网公示\n授权文件：知识库文档\n案例记录：项目记录可回溯",boundaries:"不使用绝对化承诺；排名表述必须给出样本范围与时间。"};
 const input={questionId:"q1",question:"机构靠谱吗？如何判断服务商资质？",intent:"机构可信度与选型判断标准",version:1,revision:2,logic};
@@ -76,13 +75,7 @@ describe("Response Logic frontend-sample evaluation",()=>{
  });
  // The formal report panel itself is judge-only and covered by
  // response-logic-judge-report.test.ts; the rule engine stays internal.
- it("renders selectable actions, editable draft and a local-preview adopt control",()=>{
-  const markup=renderToStaticMarkup(createElement(ResponseLogicOptimizationWorkflow,{question:input.question,intent:input.intent,contextKey:`${input.questionId}:${input.revision}`,logic,onBack:()=>{}}));
-  expect((markup.match(/type="checkbox"/g)||[]).length).toBe(4);
-  expect(markup).toContain("rl-opt-layout");
-  expect(markup).toContain("采用（本地预览）");
-  expect(markup).toContain("修改前");
-  expect(markup).toContain("修改后");
-  expect(markup).not.toContain("演示");
- });
+ // The optimization workflow now consumes the LLM optimizer API and is
+ // covered end-to-end by response-logic-optimization-report.test.ts;
+ // the rule engine itself stays internal (pure-function tests above).
 });
