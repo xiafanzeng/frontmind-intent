@@ -10,6 +10,8 @@ import {
   createTaskLifecycleReducer,
   initialTaskLifecycleState,
   taskStartBlocked,
+  MAX_TASK_POLL_ATTEMPTS,
+  TASK_POLL_INTERVAL_MS,
   type TaskLifecycleEvent,
   type TaskLifecycleState,
   type TaskPhase,
@@ -35,11 +37,8 @@ export const judgeStartBlocked = taskStartBlocked;
  */
 export const judgeEvaluationReducer = createTaskLifecycleReducer<JudgeOutput>({
   timeoutCode: "JUDGE_TIMEOUT",
-  timeoutMessage: "Judge 评估超时（轮询次数达到上限）",
+  timeoutMessage: "等待 Judge 评估结果超时。任务可能仍在后台运行，请稍后重新查看评估；若重新查看仍长时间无结果，再重试评估。",
 });
-
-const POLL_INTERVAL_MS = 3000;
-const MAX_POLL_ATTEMPTS = 100; // ~5 minutes
 
 /**
  * Manages the LLM-as-Judge async task lifecycle with context protection.
@@ -126,10 +125,10 @@ export function useJudgeEvaluation(input: {
     expectedRevision: number;
     signal: AbortSignal;
   }) => {
-    while (pollCountRef.current < MAX_POLL_ATTEMPTS) {
+    while (pollCountRef.current < MAX_TASK_POLL_ATTEMPTS) {
       if (args.signal.aborted) return;
 
-      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+      await new Promise(resolve => setTimeout(resolve, TASK_POLL_INTERVAL_MS));
       if (args.signal.aborted) return;
 
       pollCountRef.current++;

@@ -10,6 +10,8 @@ import {
   createTaskLifecycleReducer,
   initialTaskLifecycleState,
   taskStartBlocked,
+  MAX_TASK_POLL_ATTEMPTS,
+  TASK_POLL_INTERVAL_MS,
   type TaskLifecycleState,
 } from "./task-lifecycle.js";
 
@@ -21,11 +23,8 @@ export const initialOptimizationLifecycleState = initialTaskLifecycleState<Optim
 
 const optimizationReducer = createTaskLifecycleReducer<OptimizationOutput>({
   timeoutCode: "OPTIMIZATION_TIMEOUT",
-  timeoutMessage: "优化任务轮询超时（轮询次数达到上限）",
+  timeoutMessage: "等待优化结果超时。任务可能仍在后台运行，请稍后重新生成；幂等机制会复用同一任务，不会重复计费。",
 });
-
-const POLL_INTERVAL_MS = 3000;
-const MAX_POLL_ATTEMPTS = 100; // ~5 minutes
 
 /**
  * Manages the LLM optimization task lifecycle with the same context
@@ -112,10 +111,10 @@ export function useOptimizationGeneration(input: {
     judgeTaskId: string;
     signal: AbortSignal;
   }) => {
-    while (pollCountRef.current < MAX_POLL_ATTEMPTS) {
+    while (pollCountRef.current < MAX_TASK_POLL_ATTEMPTS) {
       if (args.signal.aborted) return;
 
-      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+      await new Promise(resolve => setTimeout(resolve, TASK_POLL_INTERVAL_MS));
       if (args.signal.aborted) return;
 
       pollCountRef.current++;

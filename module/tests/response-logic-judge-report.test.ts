@@ -7,6 +7,7 @@ import {
   judgeStartBlocked,
   initialJudgeLifecycleState,
 } from "../client/use-judge-evaluation.js";
+import { MAX_TASK_POLL_ATTEMPTS, TASK_POLL_INTERVAL_MS } from "../client/task-lifecycle.js";
 import { judgeContextKey } from "../client/response-logic-judge-client.js";
 import { judgeOutputSchema, type JudgeOutput } from "../contracts/response-logic-judge.js";
 import { ResponseLogicEvaluationPanel } from "../client/response-logic/evaluation-panel.js";
@@ -132,6 +133,23 @@ describe("judgeEvaluationReducer", () => {
     const timedOut = judgeEvaluationReducer(runningOn(K1), { type: "timeout", contextKey: K1 });
     expect(timedOut.phase).toBe("failed");
     expect(timedOut.errorCode).toBe("JUDGE_TIMEOUT");
+    // Timeout wording must not imply the task certainly failed: the upstream
+    // may still be running and a later check reuses the same idempotent task.
+    expect(timedOut.error).toContain("任务可能仍在后台运行");
+  });
+
+  it("shares one polling budget across judge and optimizer covering real 7-12min runtimes", () => {
+    // ~10 minutes at the 3s interval; production judge tasks observed at
+    // 7-12 minutes made the previous 100-attempt (~5 min) cap report
+    // spurious timeouts while the task was still executing upstream.
+    expect(TASK_POLL_INTERVAL_MS).toBe(3000);
+    expect(MAX_TASK_POLL_ATTEMPTS).toBe(200);
+    expect((MAX_TASK_POLL_ATTEMPTS * TASK_POLL_INTERVAL_MS) / 60000).toBeGreaterThanOrEqual(10);
+    // A timeout settles the phase into failed — it never dispatches a new
+    // start by itself; a manual restart is the only path to a new request.
+    const timedOut = judgeEvaluationReducer(runningOn(K1), { type: "timeout", contextKey: K1 });
+    expect(judgeStartBlocked(timedOut.phase)).toBe(false);
+    expect(timedOut.taskId).toBeTruthy(); // the task reference is kept, not auto-restarted
   });
 
   it("reset returns to idle but keeps the active context", () => {
