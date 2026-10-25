@@ -143,7 +143,7 @@ export function ResponseLogicEvaluationPanel({question,intent,judgePhase,judgeRe
         </div>
       </div>
       <aside className="rl-eval-diagnosis rl-eval-card"><h3>诊断摘要 <span className={`rl-dx-status ${status.tone}`}>{status.label}</span><small>{diagnoses.length ? `${diagnoses.length} 项待处理` : ""}</small></h3>
-        <p className="rl-judge-overview" style={{margin:"0 0 10px"}}>{judgeResult.overallAssessment}</p>
+        <p className="rl-judge-overall">{judgeResult.overallAssessment}</p>
         {diagnoses.length?<div className="rl-dx-list">{diagnoses.map(item=><details className="rl-dx-item" key={item.id}>
           <summary><b>{item.dimensionLabel}</b><span className={`rl-eval-tag ${SEVERITY_CLASS[item.severity]}`}>{SEVERITY_TEXT[item.severity]}</span><span className="rl-cov-chevron" aria-hidden="true">⌄</span></summary>
           <div className="rl-dx-body">
