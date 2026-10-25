@@ -333,6 +333,36 @@ describe("judge API: GET /tasks/:taskId/status", () => {
     expect((await res.json()).error.code).toBe("JUDGE_SCORE_INCONSISTENT");
   });
 
+  it("returns 422 when boundaryRisk claims a numeric score with no scoreable risks", async () => {
+    const bad = structuredClone(validJudge);
+    bad.dimensions.boundaryRisk.score = 100; // would render as 100 instead of 未评估
+    for (const risk of bad.dimensions.boundaryRisk.risks) {
+      risk.status = "undetected" as typeof risk.status;
+    }
+    const events = [judgeEvent(JSON.stringify(bad)), stoppedEvent()];
+    const url = await makeApp({ upstreamEvents: events });
+    const res = await getStatus(url, "task-judge-001");
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.error.code).toBe("JUDGE_SCORE_INCONSISTENT");
+    expect(body.error.message).toContain("未评估");
+  });
+
+  it("returns completed with boundaryRisk null score when no risks are scoreable", async () => {
+    const judge = structuredClone(validJudge);
+    judge.dimensions.boundaryRisk.score = null;
+    for (const risk of judge.dimensions.boundaryRisk.risks) {
+      risk.status = "undetected" as typeof risk.status;
+    }
+    const events = [judgeEvent(JSON.stringify(judge)), stoppedEvent()];
+    const url = await makeApp({ upstreamEvents: events });
+    const res = await getStatus(url, "task-judge-001");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("completed");
+    expect(body.judge.dimensions.boundaryRisk.score).toBeNull();
+  });
+
   it("returns 422 on draft excerpt not found", async () => {
     const bad = structuredClone(validJudge);
     bad.dimensions.relevance.findings = [{

@@ -298,6 +298,22 @@ function validateJudgeConsistency(
       message: `边界与风险控制分数 ${judge.dimensions.boundaryRisk.score} 与风险状态复算 ${boundaryExpected} 不一致`,
     };
   }
+  // The recompute helper cannot express this case: with no scoreable risk
+  // items its expected value is null, which the caller reads as "consistent".
+  // A numeric score here would render as a real score (e.g. a fabricated 100)
+  // instead of 未评估, so reject it explicitly.
+  if (
+    judge.dimensions.boundaryRisk.score !== null &&
+    !judge.dimensions.boundaryRisk.risks.some(
+      (risk) => risk.status === "controlled" || risk.status === "partial" || risk.status === "uncontrolled",
+    )
+  ) {
+    return {
+      ok: false,
+      code: "JUDGE_SCORE_INCONSISTENT",
+      message: "边界与风险控制无可计分的适用风险项，分数必须为 null（未评估），不得给出数字分",
+    };
+  }
 
   // Evidence excerpt verification
   const excerptResult = verifyDraftExcerpt(judge, logic);

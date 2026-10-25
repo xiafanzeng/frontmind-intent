@@ -267,6 +267,18 @@ describe("score recomputation", () => {
     }
     expect(recomputeBoundaryRiskScore(j)).toBeNull();
   });
+
+  it("documents the recompute blind spot: a numeric score with no scoreable risks still returns null", () => {
+    // The helper's null return means "consistent", so it cannot flag this
+    // fabrication (e.g. score 100 with nothing scoreable). The server's
+    // validateJudgeConsistency rejects it explicitly — see the judge API tests.
+    const j = structuredClone(validJudge);
+    j.dimensions.boundaryRisk.score = 100;
+    for (const r of j.dimensions.boundaryRisk.risks) {
+      r.status = "undetected" as typeof r.status;
+    }
+    expect(recomputeBoundaryRiskScore(j)).toBeNull();
+  });
 });
 
 describe("evaluator skill directory archive", () => {
