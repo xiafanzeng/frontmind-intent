@@ -20,6 +20,9 @@ const actionabilityBandText: Record<string, string> = {
 const coverageFieldText: Record<string, string> = {
   concern: "用户真实关心", conclusion: "核心结论/执行口径", facts: "企业材料/官方依据", boundaries: "回答边界/禁止表达",
 };
+const subMetricText: Record<string, string> = {
+  content_specificity: "内容具体度", evidence_guidance: "证据指引", structure_guidance: "结构引导",
+};
 const coverageStatusText: Record<string, string> = { covered: "完整", partial: "部分覆盖", missing: "缺失" };
 const riskKeyText: Record<string, string> = {
   unverified_ranking: "无依据排名", absolute_claim: "绝对化表达", effect_promise: "效果保证",
@@ -81,21 +84,13 @@ export function renderJudgeDimension(
 
 export function JudgeRelevance({ data }: { data: JudgeOutput["dimensions"]["relevance"] }) {
   return <div className="rl-judge-section">
-    <div className="rl-judge-section-head">
-      <span className="rl-judge-source-tag">LLM 语义判断</span>
-      <strong>{data.score}</strong>
-      <span className="rl-eval-tag">{relevanceBandText[data.band] ?? data.band}</span>
-    </div>
+    <span className="rl-eval-tag">{relevanceBandText[data.band] ?? data.band}</span>
     <FindingsList findings={data.findings} />
   </div>;
 }
 
 export function JudgeCompleteness({ data }: { data: JudgeOutput["dimensions"]["completeness"] }) {
   return <div className="rl-judge-section">
-    <div className="rl-judge-section-head">
-      <span className="rl-judge-source-tag">LLM 语义判断</span>
-      <strong>{data.score}</strong>
-    </div>
     <div className="rl-judge-coverage">
       {data.coverage.map(item => (
         <div key={item.field} className={`rl-judge-cov-item ${item.status}`}>
@@ -111,15 +106,11 @@ export function JudgeCompleteness({ data }: { data: JudgeOutput["dimensions"]["c
 
 export function JudgeActionability({ data }: { data: JudgeOutput["dimensions"]["actionability"] }) {
   return <div className="rl-judge-section">
-    <div className="rl-judge-section-head">
-      <span className="rl-judge-source-tag">LLM 语义判断</span>
-      <strong>{data.score}</strong>
-    </div>
     <div className="rl-judge-submetrics">
       {data.subMetrics.map(sub => (
         <div key={sub.key} className="rl-judge-submetric">
           <div className="rl-judge-submetric-head">
-            <span className="rl-judge-submetric-label">{coverageFieldText[sub.key] ?? sub.key}</span>
+            <span className="rl-judge-submetric-label">{subMetricText[sub.key] ?? sub.key}</span>
             <span className="rl-eval-tag neutral">{sub.score}</span>
             <span className="rl-eval-tag">{actionabilityBandText[sub.band] ?? sub.band}</span>
           </div>
@@ -133,12 +124,6 @@ export function JudgeActionability({ data }: { data: JudgeOutput["dimensions"]["
 
 export function JudgeBoundaryRisk({ data }: { data: JudgeOutput["dimensions"]["boundaryRisk"] }) {
   return <div className="rl-judge-section">
-    <div className="rl-judge-section-head">
-      <span className="rl-judge-source-tag">LLM 语义判断</span>
-      {data.score === null
-        ? <span className="rl-eval-tag neutral">未评估</span>
-        : <strong>{data.score}</strong>}
-    </div>
     {data.score === null && <p className="rl-judge-null-note">无可计分的适用风险项（不代表风险控制已达标）</p>}
     <div className="rl-judge-risks">
       {data.risks.map(risk => (

@@ -191,9 +191,25 @@ describe("formal four-dimension report rendering", () => {
   it("renders all four dimensions from judge data alone, with no rule content", () => {
     const html = renderPanel({ judgePhase: "completed", judgeResult: buildJudge() });
     expect(countOccurrences(html, 'class="rl-eval-card rl-eval-score-card"')).toBe(4);
-    // LLM scores present for scored dimensions (85/75/67) and diagnosis aggregates judge findings
-    expect(html).toContain(">85</strong>");
-    expect(html).toContain(">67</strong>");
+    // Scores stay visible on the collapsed cards (85/75/67 rendered by <Score>)
+    expect(html).toMatch(/class="(good|warn|bad)">85<small/);
+    expect(html).toMatch(/class="(good|warn|bad)">67<small/);
+    // The old「LLM 语义判断」source rows are gone entirely
+    expect(html).not.toContain("LLM 语义判断");
+    expect(html).not.toContain("rl-judge-source-tag");
+    // Details are collapsed by default: findings live inside closed <details>
+    expect(countOccurrences(html, "<details open")).toBe(0); // every section starts collapsed
+    expect(countOccurrences(html, "查看详情")).toBe(4);
+    // The finding reason is only inside the collapsed section markup
+    expect(html).toContain("结论首句未直接回应问题主语");
+    // Sub-metric keys render in Chinese, never as raw enum keys
+    expect(html).toContain("内容具体度");
+    expect(html).toContain("证据指引");
+    expect(html).toContain("结构引导");
+    expect(html).not.toContain("content_specificity");
+    expect(html).not.toContain("evidence_guidance");
+    expect(html).not.toContain("structure_guidance");
+    // Diagnosis aggregates judge findings
     expect(html).toContain("草稿整体回应了选型问题");
     expect(html).toContain("待改进");
     // No rule-engine content anywhere in the formal report
@@ -203,17 +219,21 @@ describe("formal four-dimension report rendering", () => {
 
   it("renders boundaryRisk score=null as 未评估 instead of a numeric score", () => {
     const html = renderPanel({ judgePhase: "completed", judgeResult: buildJudge(null) });
+    // The card-level Score renders the 未评估 state; no numeric zero anywhere.
     expect(html).toContain("未评估");
     expect(html).not.toMatch(/<strong[^>]*>\s*0\s*<small>/);
     const dimension = renderToStaticMarkup(renderJudgeDimension(buildJudge(null), "boundaryRisk") as ReactElement);
-    expect(dimension).toContain("未评估");
     expect(dimension).toContain("无可计分的适用风险项");
+    expect(dimension).not.toContain("LLM 语义判断");
     expect(dimension).not.toMatch(/<strong>\s*\d+\s*<\/strong>/);
   });
 
-  it("renders a numeric boundaryRisk score normally", () => {
+  it("renders a scored boundaryRisk dimension without the old head row", () => {
     const dimension = renderToStaticMarkup(renderJudgeDimension(buildJudge(63), "boundaryRisk") as ReactElement);
-    expect(dimension).toMatch(/<strong>63<\/strong>/);
+    expect(dimension).not.toContain("LLM 语义判断");
+    expect(dimension).not.toContain("rl-judge-source-tag");
+    // risk items still render (score itself now lives on the card's Score)
+    expect(dimension).toContain("无依据排名");
   });
 
   it("shows the running state instead of any partial report", () => {

@@ -78,11 +78,20 @@ const EVALUATION_RULES:Record<string,ReactNode>={
   </>,
 };
 
-/** One dimension card: LLM score + LLM findings + rubric introduction. */
-function DimensionCard({title,rules,children}:{title:string;rules:ReactNode;children:ReactNode}){
+/**
+ * One dimension card. Default (collapsed) state shows only the title, the
+ * score and two entry points; findings, excerpts, suggestions, evidence tags
+ * and sub-metric scores live behind the collapsed「查看详情」section so the
+ * first screen stays clean.
+ */
+function DimensionCard({title,score,rules,children}:{title:string;score:number|null;rules:ReactNode;children:ReactNode}){
   return <WorkbenchCard title={title}>
-    {children}
+    <Score value={score}/>
     <div className="rl-eval-tabs">
+      <details className="rl-eval-tab" name={`eval-${title}`}>
+        <summary>查看详情<span className="rl-tab-chevron" aria-hidden="true">⌄</span></summary>
+        <div className="rl-eval-detail-content">{children}</div>
+      </details>
       <details className="rl-eval-tab" name={`eval-${title}`}>
         <summary>评估规则介绍<span className="rl-tab-chevron" aria-hidden="true">⌄</span></summary>
         <div className="rl-eval-detail-content rl-eval-rules">{rules}</div>
@@ -124,20 +133,16 @@ export function ResponseLogicEvaluationPanel({question,intent,judgePhase,judgeRe
     <div className="rl-eval-layout">
       <div className="rl-eval-main">
         <div className="rl-eval-grid">
-          <DimensionCard title="回答相关性" rules={EVALUATION_RULES.relevance}>
-            <Score value={d.relevance.score}/>
+          <DimensionCard title="回答相关性" score={d.relevance.score} rules={EVALUATION_RULES.relevance}>
             <JudgeRelevance data={d.relevance}/>
           </DimensionCard>
-          <DimensionCard title="完整性" rules={EVALUATION_RULES.completeness}>
-            <Score value={d.completeness.score}/>
+          <DimensionCard title="完整性" score={d.completeness.score} rules={EVALUATION_RULES.completeness}>
             <JudgeCompleteness data={d.completeness}/>
           </DimensionCard>
-          <DimensionCard title="可执行性" rules={EVALUATION_RULES.actionability}>
-            <Score value={d.actionability.score}/>
+          <DimensionCard title="可执行性" score={d.actionability.score} rules={EVALUATION_RULES.actionability}>
             <JudgeActionability data={d.actionability}/>
           </DimensionCard>
-          <DimensionCard title="边界与风险控制" rules={EVALUATION_RULES.boundaryRisk}>
-            <Score value={d.boundaryRisk.score}/>
+          <DimensionCard title="边界与风险控制" score={d.boundaryRisk.score} rules={EVALUATION_RULES.boundaryRisk}>
             <JudgeBoundaryRisk data={d.boundaryRisk}/>
           </DimensionCard>
         </div>
