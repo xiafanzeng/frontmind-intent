@@ -55,6 +55,7 @@ import {ResponseLogicEvaluationPanel} from "./response-logic/evaluation-panel.js
 import {ResponseLogicOptimizationWorkflow} from "./response-logic/optimization-workflow.js";
 import {createDemoEvaluation, fingerprintLogic, type LogicField, type LogicSections} from "./response-logic/mock-evaluation.js";
 import {resolveResponseLogicRuleEvaluation, type ResponseLogicRuleEvaluation} from "./response-logic-evaluation-client.js";
+import {startUnifiedEvaluation} from "./response-logic-unified-evaluation.js";
 import {useJudgeEvaluation} from "./use-judge-evaluation.js";
 import {
   parseResponseLogicReply as parseResponseLogicReplyCore,
@@ -1831,19 +1832,16 @@ function ResponseLogicQuestionEditor({
       setEvaluationPending(false);
     }
   }, [questionId, currentRevision]);
-  const beginDemoEvaluation = () => {
-    void runServerEvaluation().then(evaluation => {
-      if (evaluation) {
-        setDemoView("evaluation");
-        // Start LLM Judge in parallel after rule results are ready to show
-        void judge.start();
-      }
-    });
-  };
-
   // LLM-as-Judge async evaluation — integrated into the unified evaluation flow,
   // not a separate button. Started by beginDemoEvaluation alongside rule evaluation.
   const judge = useJudgeEvaluation({ questionId, recordRevision: currentRevision, sourceFingerprint: currentFingerprint });
+  const beginDemoEvaluation = () => {
+    void startUnifiedEvaluation({
+      runRuleEvaluation: runServerEvaluation,
+      startJudgeEvaluation: () => judge.start(),
+      enterEvaluationView: () => setDemoView("evaluation"),
+    });
+  };
 
   const showGenerationProcess =
     generating ||
