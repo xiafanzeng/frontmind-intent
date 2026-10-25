@@ -1,6 +1,9 @@
 import {useMemo,useState,type ReactNode} from "react";
 import {buildDiagnosis,type DemoEvaluation,type LogicField} from "./mock-evaluation.js";
 import {Score,WorkbenchCard,WorkbenchSteps} from "./workbench-parts.js";
+import {renderJudgeDimension,JudgeStatusBanner} from "./judge-panel.js";
+import type {JudgeOutput} from "../../contracts/response-logic-judge.js";
+import type {JudgePhase} from "../use-judge-evaluation.js";
 import "./evaluation.css";
 
 /** Short, data-driven card summaries (1–2 sentences). Details live behind the card's tabs. */
@@ -63,11 +66,12 @@ const EVALUATION_RULES:Record<string,ReactNode>={
   </>,
 };
 
-/** One dimension card: score + 1–2 sentence summary + two parallel expandable tabs (details / rules). */
-function DimensionCard({title,ruleKey,scoreValue,summary,detail,rules}:{title:string;ruleKey:string;scoreValue:number|null;summary:string;detail:ReactNode;rules:ReactNode}){
+/** One dimension card: rule score + summary + Judge section + expandable tabs (details / rules). */
+function DimensionCard({title,ruleKey,scoreValue,summary,detail,rules,judgeSection}:{title:string;ruleKey:string;scoreValue:number|null;summary:string;detail:ReactNode;rules:ReactNode;judgeSection?:ReactNode}){
   return <WorkbenchCard title={title}>
     <Score value={scoreValue}/>
     <p className="rl-eval-score-description">{summary}</p>
+    {judgeSection}
     <div className="rl-eval-tabs">
       <details className="rl-eval-tab" name={`eval-${ruleKey}`}>
         <summary>查看详情<span className="rl-tab-chevron" aria-hidden="true">⌄</span></summary>
@@ -82,7 +86,7 @@ function DimensionCard({title,ruleKey,scoreValue,summary,detail,rules}:{title:st
 }
 
 /** Presentation counterpart to brand IntentWorkbench's iw-evaluation. The diagnosis method area states the data source honestly; live callers pass the server label, preview keeps the local-sample default. */
-export function ResponseLogicEvaluationPanel({evaluation,dataSourceLabel,onBack,onOptimize,onLocate}:{evaluation:DemoEvaluation;dataSourceLabel?:string;onBack:()=>void;onOptimize:()=>void;onLocate?:(field:LogicField)=>void}){
+export function ResponseLogicEvaluationPanel({evaluation,dataSourceLabel,judgePhase,judgeResult,onBack,onOptimize,onLocate}:{evaluation:DemoEvaluation;dataSourceLabel?:string;judgePhase?:JudgePhase;judgeResult?:JudgeOutput|null;onBack:()=>void;onOptimize:()=>void;onLocate?:(field:LogicField)=>void}){
   const {dimensions}=evaluation;
   const [expandedId,setExpandedId]=useState<string|null>(null);
   const diagnoses=useMemo(()=>buildDiagnosis(evaluation),[evaluation]);
@@ -91,14 +95,17 @@ export function ResponseLogicEvaluationPanel({evaluation,dataSourceLabel,onBack,
     ?{label:"存在风险",tone:"risk" as const}
     :diagnoses.length?{label:"待完善",tone:"improve" as const}
     :{label:"暂无待处理问题",tone:"ok" as const};
+  const hasJudge = judgeResult !== undefined && judgeResult !== null;
   return <section className="rl-eval-root" aria-label="应答逻辑评估">
     <div className="rl-eval-back"><button type="button" className="rl-eval-back-button" onClick={onBack}>← 返回应答逻辑详情</button></div>
-    <header className="rl-eval-heading"><div><h2>应答逻辑评估 · {evaluation.question}</h2><p>Intent：{evaluation.intent||"未提供"} · 四项独立评分，不设综合分</p></div></header>
+    <header className="rl-eval-heading"><div><h2>应答逻辑评估 · {evaluation.question}</h2><p>Intent：{evaluation.intent||"未提供"} · 四项独立评分，不设综合分{hasJudge ? " · 含 LLM 语义判断" : ""}</p></div></header>
+    {judgePhase !== undefined && judgePhase !== "idle" && judgePhase !== "completed" && <JudgeStatusBanner phase={judgePhase} error={judgePhase === "failed" ? "语义评估未完成" : undefined} />}
     <WorkbenchSteps step={1}/>
     <div className="rl-eval-layout">
       <div className="rl-eval-main">
         <div className="rl-eval-grid">
           <DimensionCard title="回答相关性" ruleKey="relevance" scoreValue={dimensions.relevance.score} summary={summary.relevance}
+            judgeSection={hasJudge ? renderJudgeDimension(judgeResult!, "relevance") : undefined}
             detail={<>
               <ul className="rl-eval-issues">{dimensions.relevance.issues.map((x,i)=><li key={i}>{x}</li>)}</ul>
               <p><b>原文依据</b>{dimensions.relevance.evidence}</p>
@@ -107,12 +114,15 @@ export function ResponseLogicEvaluationPanel({evaluation,dataSourceLabel,onBack,
             </>}
             rules={EVALUATION_RULES.relevance}/>
           <DimensionCard title="完整性" ruleKey="completeness" scoreValue={dimensions.completeness.score} summary={summary.completeness}
+            judgeSection={hasJudge ? renderJudgeDimension(judgeResult!, "completeness") : undefined}
             detail={<div className="rl-cov-list">{dimensions.completeness.coverage.map(item=><details className="rl-cov-item" key={item.field} open={item.status!=="covered"}><summary><b>{item.label}</b><span className={`rl-eval-tag ${item.status}`}>{item.statusText}</span><span className="rl-cov-chevron" aria-hidden="true">⌄</span></summary><div className="rl-cov-body"><p><b>覆盖情况</b>{item.situation}</p><p><b>判断依据</b>{item.basis}</p><p><b>修改建议</b>{item.suggestion}</p></div></details>)}</div>}
             rules={EVALUATION_RULES.completeness}/>
           <DimensionCard title="可执行性" ruleKey="actionability" scoreValue={dimensions.actionability.score} summary={summary.actionability}
+            judgeSection={hasJudge ? renderJudgeDimension(judgeResult!, "actionability") : undefined}
             detail={<div className="rl-cov-list">{dimensions.actionability.subMetrics.map(item=><details className="rl-cov-item rl-sub-item" name="eval-actionability-sub" key={item.key}><summary><b>{item.label}</b><span className="rl-eval-tag neutral">{item.score} / 100</span><span className={`rl-eval-tag ${item.score>=80?"supported":item.score>=50?"partial":"missing"}`}>{item.band}</span><span className="rl-cov-chevron" aria-hidden="true">⌄</span></summary><div className="rl-cov-body"><p>{item.reason}</p><p><b>原文依据</b><span className="rl-eval-evidence">{item.evidence}</span></p><p><b>问题</b>{item.issue}</p><p><b>修改建议</b>{item.suggestion}</p><p><b>修改后预期</b>{item.effect}</p></div></details>)}</div>}
             rules={EVALUATION_RULES.actionability}/>
           <DimensionCard title="边界与风险控制" ruleKey="boundary" scoreValue={dimensions.boundaryRisk.score} summary={summary.boundaryRisk}
+            judgeSection={hasJudge ? renderJudgeDimension(judgeResult!, "boundaryRisk") : undefined}
             detail={<>
               {dimensions.boundaryRisk.risks.map(risk=><div className="rl-eval-risk" key={risk.key}><b>{risk.label}</b><span className={`rl-eval-tag ${risk.status==="controlled"?"supported":risk.status==="partial"?"partial":risk.status==="uncontrolled"?"missing":"neutral"}`}>{risk.statusText}</span>{risk.excerpt&&<p className="rl-eval-evidence">原文片段：…{risk.excerpt}…</p>}<p>{risk.guidance}</p></div>)}
               <p className="rl-eval-submethod">计分口径：{dimensions.boundaryRisk.note}</p>

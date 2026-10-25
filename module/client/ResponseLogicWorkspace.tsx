@@ -56,7 +56,6 @@ import {ResponseLogicOptimizationWorkflow} from "./response-logic/optimization-w
 import {createDemoEvaluation, fingerprintLogic, type LogicField, type LogicSections} from "./response-logic/mock-evaluation.js";
 import {resolveResponseLogicRuleEvaluation, type ResponseLogicRuleEvaluation} from "./response-logic-evaluation-client.js";
 import {useJudgeEvaluation} from "./use-judge-evaluation.js";
-import {JudgeResultPanel} from "./response-logic/judge-panel.js";
 import {
   parseResponseLogicReply as parseResponseLogicReplyCore,
   getResponseLogicPollDelay as getResponseLogicPollDelayCore,
@@ -1832,12 +1831,19 @@ function ResponseLogicQuestionEditor({
       setEvaluationPending(false);
     }
   }, [questionId, currentRevision]);
-  const beginDemoEvaluation = () => { void runServerEvaluation().then(evaluation => { if (evaluation) setDemoView("evaluation"); }); };
+  const beginDemoEvaluation = () => {
+    void runServerEvaluation().then(evaluation => {
+      if (evaluation) {
+        setDemoView("evaluation");
+        // Start LLM Judge in parallel after rule results are ready to show
+        void judge.start();
+      }
+    });
+  };
 
-  // LLM-as-Judge async evaluation (independent from rule evaluation)
-  const [showJudge, setShowJudge] = useState(false);
+  // LLM-as-Judge async evaluation — integrated into the unified evaluation flow,
+  // not a separate button. Started by beginDemoEvaluation alongside rule evaluation.
   const judge = useJudgeEvaluation({ questionId, recordRevision: currentRevision, sourceFingerprint: currentFingerprint });
-  const beginJudgeEvaluation = () => { setShowJudge(true); void judge.start(); };
 
   const showGenerationProcess =
     generating ||
@@ -1961,19 +1967,8 @@ function ResponseLogicQuestionEditor({
             <>
               <button type="button" className="rl-eval-entry-button" onClick={beginDemoEvaluation}>查看四维评估</button>
               <button type="button" className="rl-eval-entry-button" onClick={() => { void (async () => { if (validDemoEvaluation) { setDemoView("optimize"); return; } const evaluation = await runServerEvaluation(); if (evaluation) setDemoView("optimize"); })(); }}>生成优化应答逻辑</button>
-              {!showJudge && <button type="button" className="rl-eval-entry-button" onClick={beginJudgeEvaluation} disabled={judge.state.phase === "starting" || judge.state.phase === "running"}>LLM 语义评估</button>}
               {evaluationError && <span role="alert" style={{display:"inline-flex",alignItems:"center",gap:8,fontSize:12,color:"#b64d52"}}>{evaluationError}<button type="button" className="rl-text-button" onClick={beginDemoEvaluation}>重试</button></span>}
             </>
-          )}
-        </div>
-      )}
-      {showDemo && demoView === "detail" && showJudge && (
-        <div className="rl-eval-entry" role="status" style={{margin:"0 0 14px",fontSize:13}}>
-          {judge.state.phase === "starting" && <span style={{display:"inline-flex",alignItems:"center",gap:6,color:"#667085"}}><Loader2 size={14} className="animate-spin"/>正在启动 LLM 语义评估…</span>}
-          {judge.state.phase === "running" && <span style={{display:"inline-flex",alignItems:"center",gap:6,color:"#667085"}}><Loader2 size={14} className="animate-spin"/>LLM 评估进行中…（任务 {judge.state.taskId?.slice(0,12)}…）</span>}
-          {judge.state.phase === "failed" && <span style={{color:"#b64d52",fontSize:12}} role="alert">{judge.state.error}<button type="button" className="rl-text-button" onClick={beginJudgeEvaluation}>重试</button><button type="button" className="rl-text-button" onClick={() => { judge.reset(); setShowJudge(false); }}>关闭</button></span>}
-          {judge.state.phase === "completed" && judge.state.result && (
-            <JudgeResultPanel judge={judge.state.result} onBack={() => { judge.reset(); setShowJudge(false); }} />
           )}
         </div>
       )}
@@ -1982,7 +1977,7 @@ function ResponseLogicQuestionEditor({
           {evaluationPersisted === false && (
             <p role="status" style={{margin:"0 0 10px",fontSize:12,color:"#a86722"}}>本次评估结果已生成，但尚未保存到服务器（评估历史存储待数据库迁移启用）；刷新后需重新评估。</p>
           )}
-          <ResponseLogicEvaluationPanel evaluation={validDemoEvaluation} dataSourceLabel="服务端规则评估（未接入 Judge / Ragas / DeepEval 语义模型）" onBack={()=>setDemoView("detail")} onOptimize={()=>setDemoView("optimize")} onLocate={field=>locateLogicField(field, ()=>setDemoView("detail"))}/>
+          <ResponseLogicEvaluationPanel evaluation={validDemoEvaluation} dataSourceLabel="服务端规则评估＋LLM 语义判断" judgePhase={judge.state.phase} judgeResult={judge.state.result} onBack={()=>setDemoView("detail")} onOptimize={()=>setDemoView("optimize")} onLocate={field=>locateLogicField(field, ()=>setDemoView("detail"))}/>
         </>
       )}
       {showDemo && demoView === "optimize" && validDemoEvaluation && (

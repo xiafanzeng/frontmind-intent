@@ -1,4 +1,5 @@
 import type { JudgeOutput, JudgeFinding, JudgeEvidenceSource, JudgeEvidenceConfidence } from "../../contracts/response-logic-judge.js";
+import type { JudgePhase } from "../use-judge-evaluation.js";
 
 const evidenceSourceText: Record<JudgeEvidenceSource, string> = {
   draft: "草稿原文", knowledge: "知识材料", inference: "模型推断",
@@ -8,7 +9,6 @@ const confidenceText: Record<JudgeEvidenceConfidence, string> = {
 };
 const severityClass: Record<string, string> = { info: "neutral", improve: "partial", risk: "missing" };
 const severityText: Record<string, string> = { info: "观察", improve: "待改进", risk: "风险" };
-
 const relevanceBandText: Record<string, string> = {
   direct: "直接回应", mostly_relevant: "整体相关", partially_responsive: "部分回应",
   background_dominant: "背景为主", off_topic: "明显偏题",
@@ -50,80 +50,105 @@ function FindingsList({ findings }: { findings: JudgeFinding[] }) {
   return <div className="rl-judge-findings">{findings.map((f, i) => <FindingItem key={i} finding={f} />)}</div>;
 }
 
-export function JudgeResultPanel({ judge, onBack }: { judge: JudgeOutput; onBack: () => void }) {
+/** Status indicator shown when Judge is still running or has failed. */
+export function JudgeStatusBanner({ phase, error }: { phase: JudgePhase; error?: string }) {
+  if (phase === "running" || phase === "starting") {
+    return <div className="rl-judge-status" role="status">LLM 语义评估进行中…（完成后自动补充到各维度）</div>;
+  }
+  if (phase === "failed") {
+    return <div className="rl-judge-status rl-judge-status-failed" role="alert">LLM 语义评估{error ? `失败：${error}` : "未完成"} · 规则检查结果不受影响</div>;
+  }
+  return null;
+}
+
+/** Factory: returns a ReactNode for the Judge section of a specific dimension. */
+export function renderJudgeDimension(
+  judge: JudgeOutput,
+  dimension: "relevance" | "completeness" | "actionability" | "boundaryRisk",
+): React.ReactNode {
   const d = judge.dimensions;
-  return (
-    <section className="rl-eval-root rl-judge-root" aria-label="LLM 语义评估">
-      <div className="rl-eval-back"><button type="button" className="rl-eval-back-button" onClick={onBack}>← 返回应答逻辑详情</button></div>
-      <header className="rl-eval-heading">
-        <div><h2>LLM 语义评估</h2><p>基于大语言模型的四维语义质量评估 · 与规则评估独立 · 无综合分</p></div>
-      </header>
-      <p className="rl-judge-overall">{judge.overallAssessment}</p>
-      <div className="rl-judge-grid">
-        {/* Relevance */}
-        <section className="rl-eval-card rl-eval-score-card">
-          <h3>回答相关性</h3>
-          <div className="rl-eval-score"><strong className={d.relevance.score >= 80 ? "good" : d.relevance.score >= 50 ? "warn" : "bad"}>{d.relevance.score}<small> / 100</small></strong></div>
-          <span className="rl-eval-tag">{relevanceBandText[d.relevance.band] ?? d.relevance.band}</span>
-          <FindingsList findings={d.relevance.findings} />
-        </section>
-        {/* Completeness */}
-        <section className="rl-eval-card rl-eval-score-card">
-          <h3>完整性</h3>
-          <div className="rl-eval-score"><strong className={d.completeness.score >= 80 ? "good" : d.completeness.score >= 50 ? "warn" : "bad"}>{d.completeness.score}<small> / 100</small></strong></div>
-          <div className="rl-judge-coverage">
-            {d.completeness.coverage.map(item => (
-              <div key={item.field} className={`rl-judge-cov-item ${item.status}`}>
-                <span className="rl-judge-cov-label">{coverageFieldText[item.field] ?? item.field}</span>
-                <span className={`rl-eval-tag ${item.status === "covered" ? "supported" : item.status === "partial" ? "partial" : "missing"}`}>{coverageStatusText[item.status] ?? item.status}</span>
-                <FindingsList findings={item.findings} />
-              </div>
-            ))}
+  switch (dimension) {
+    case "relevance":
+      return <JudgeRelevance data={d.relevance} />;
+    case "completeness":
+      return <JudgeCompleteness data={d.completeness} />;
+    case "actionability":
+      return <JudgeActionability data={d.actionability} />;
+    case "boundaryRisk":
+      return <JudgeBoundaryRisk data={d.boundaryRisk} />;
+  }
+}
+
+function JudgeRelevance({ data }: { data: JudgeOutput["dimensions"]["relevance"] }) {
+  return <div className="rl-judge-section">
+    <div className="rl-judge-section-head">
+      <span className="rl-judge-source-tag">LLM 语义判断</span>
+      <strong>{data.score}</strong>
+      <span className="rl-eval-tag">{relevanceBandText[data.band] ?? data.band}</span>
+    </div>
+    <FindingsList findings={data.findings} />
+  </div>;
+}
+
+function JudgeCompleteness({ data }: { data: JudgeOutput["dimensions"]["completeness"] }) {
+  return <div className="rl-judge-section">
+    <div className="rl-judge-section-head">
+      <span className="rl-judge-source-tag">LLM 语义判断</span>
+      <strong>{data.score}</strong>
+    </div>
+    <div className="rl-judge-coverage">
+      {data.coverage.map(item => (
+        <div key={item.field} className={`rl-judge-cov-item ${item.status}`}>
+          <span className="rl-judge-cov-label">{coverageFieldText[item.field] ?? item.field}</span>
+          <span className={`rl-eval-tag ${item.status === "covered" ? "supported" : item.status === "partial" ? "partial" : "missing"}`}>{coverageStatusText[item.status] ?? item.status}</span>
+          <FindingsList findings={item.findings} />
+        </div>
+      ))}
+    </div>
+    <FindingsList findings={data.findings} />
+  </div>;
+}
+
+function JudgeActionability({ data }: { data: JudgeOutput["dimensions"]["actionability"] }) {
+  return <div className="rl-judge-section">
+    <div className="rl-judge-section-head">
+      <span className="rl-judge-source-tag">LLM 语义判断</span>
+      <strong>{data.score}</strong>
+    </div>
+    <div className="rl-judge-submetrics">
+      {data.subMetrics.map(sub => (
+        <div key={sub.key} className="rl-judge-submetric">
+          <div className="rl-judge-submetric-head">
+            <span className="rl-judge-submetric-label">{coverageFieldText[sub.key] ?? sub.key}</span>
+            <span className="rl-eval-tag neutral">{sub.score}</span>
+            <span className="rl-eval-tag">{actionabilityBandText[sub.band] ?? sub.band}</span>
           </div>
-          <FindingsList findings={d.completeness.findings} />
-        </section>
-        {/* Actionability */}
-        <section className="rl-eval-card rl-eval-score-card">
-          <h3>可执行性</h3>
-          <div className="rl-eval-score"><strong className={d.actionability.score >= 80 ? "good" : d.actionability.score >= 50 ? "warn" : "bad"}>{d.actionability.score}<small> / 100</small></strong></div>
-          <div className="rl-judge-submetrics">
-            {d.actionability.subMetrics.map(sub => (
-              <div key={sub.key} className="rl-judge-submetric">
-                <div className="rl-judge-submetric-head">
-                  <span className="rl-judge-submetric-label">{coverageFieldText[sub.key] ?? sub.key}</span>
-                  <span className="rl-eval-tag neutral">{sub.score}</span>
-                  <span className="rl-eval-tag">{actionabilityBandText[sub.band] ?? sub.band}</span>
-                </div>
-                <FindingsList findings={sub.findings} />
-              </div>
-            ))}
-          </div>
-          <FindingsList findings={d.actionability.findings} />
-        </section>
-        {/* Boundary Risk */}
-        <section className="rl-eval-card rl-eval-score-card">
-          <h3>边界与风险控制</h3>
-          {d.boundaryRisk.score === null ? (
-            <div className="rl-eval-score"><strong className="rl-eval-not-rated">未评估</strong><p className="rl-judge-null-note">无可计分的适用风险项（不代表风险控制已达标）</p></div>
-          ) : (
-            <div className="rl-eval-score"><strong className={d.boundaryRisk.score >= 80 ? "good" : d.boundaryRisk.score >= 50 ? "warn" : "bad"}>{d.boundaryRisk.score}<small> / 100</small></strong></div>
-          )}
-          <div className="rl-judge-risks">
-            {d.boundaryRisk.risks.map(risk => (
-              <div key={risk.key} className="rl-judge-risk-item">
-                <span className="rl-judge-risk-label">{riskKeyText[risk.key] ?? risk.key}</span>
-                <span className={`rl-eval-tag ${risk.status === "controlled" ? "supported" : risk.status === "partial" ? "partial" : risk.status === "uncontrolled" ? "missing" : "neutral"}`}>{riskStatusText[risk.status] ?? risk.status}</span>
-                <FindingsList findings={risk.findings} />
-              </div>
-            ))}
-          </div>
-          <FindingsList findings={d.boundaryRisk.findings} />
-        </section>
-      </div>
-      <div className="rl-eval-actions">
-        <span>LLM 语义评估消耗模型配额；结果基于当前草稿与可用知识材料，不构成事实判断。</span>
-        <button type="button" className="rl-eval-primary" onClick={onBack}>返回详情</button>
-      </div>
-    </section>
-  );
+          <FindingsList findings={sub.findings} />
+        </div>
+      ))}
+    </div>
+    <FindingsList findings={data.findings} />
+  </div>;
+}
+
+function JudgeBoundaryRisk({ data }: { data: JudgeOutput["dimensions"]["boundaryRisk"] }) {
+  return <div className="rl-judge-section">
+    <div className="rl-judge-section-head">
+      <span className="rl-judge-source-tag">LLM 语义判断</span>
+      {data.score === null
+        ? <span className="rl-eval-tag neutral">未评估</span>
+        : <strong>{data.score}</strong>}
+    </div>
+    {data.score === null && <p className="rl-judge-null-note">无可计分的适用风险项（不代表风险控制已达标）</p>}
+    <div className="rl-judge-risks">
+      {data.risks.map(risk => (
+        <div key={risk.key} className="rl-judge-risk-item">
+          <span className="rl-judge-risk-label">{riskKeyText[risk.key] ?? risk.key}</span>
+          <span className={`rl-eval-tag ${risk.status === "controlled" ? "supported" : risk.status === "partial" ? "partial" : risk.status === "uncontrolled" ? "missing" : "neutral"}`}>{riskStatusText[risk.status] ?? risk.status}</span>
+          <FindingsList findings={risk.findings} />
+        </div>
+      ))}
+    </div>
+    <FindingsList findings={data.findings} />
+  </div>;
 }
