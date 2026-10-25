@@ -76,11 +76,24 @@ const mockCredential: CredentialHandle = {
   upstreamModel: "test-model", upstreamEffort: null,
 };
 
-/** Build a structured_output_result event. */
+/**
+ * Build a structured_output_result event using the REAL upstream envelope
+ * {success, value, error} — the schema-shaped business value lives under
+ * `value` (evidence: Core manus-v2-structured-result.ts and the generation /
+ * knowledge-base call chains that unwrap it).
+ */
 function judgeEvent(payload: string): Record<string, unknown> {
   return {
     id: "evt-1", type: "structured_output_result", timestamp: Date.now(),
-    structured_output_result: { payload },
+    structured_output_result: { success: true, value: { payload } },
+  };
+}
+
+/** Envelope variant where the upstream returned the JSON directly as a string value. */
+function judgeEventRawString(payload: string): Record<string, unknown> {
+  return {
+    id: "evt-1", type: "structured_output_result", timestamp: Date.now(),
+    structured_output_result: { success: true, value: payload },
   };
 }
 
@@ -163,11 +176,17 @@ async function makeApp(options: MockOptions = {}) {
       archives.push(input);
       return { bytes: Buffer.from(JSON.stringify(input.files)), contentHash: "a".repeat(64) };
     },
-    classifyManusV2StructuredResultEnvelope: (value: unknown) => {
-      if (typeof value === "object" && value !== null && "payload" in (value as Record<string, unknown>)) {
-        return { kind: "accepted", value };
+    classifyManusV2StructuredResultEnvelope: (input: unknown) => {
+      if (typeof input !== "object" || input === null || Array.isArray(input)) {
+        return { kind: "missing", code: "STRUCTURED_OUTPUT_MISSING" };
       }
-      return { kind: "rejected" };
+      const result = input as Record<string, unknown>;
+      const error = result.error;
+      const hasNonemptyError = error !== undefined && error !== null && (typeof error !== "string" || error.trim().length > 0);
+      if (result.success === false || hasNonemptyError) return { kind: "rejected", code: "STRUCTURED_OUTPUT_REJECTED" };
+      if (result.value === undefined) return { kind: "missing", code: "STRUCTURED_OUTPUT_MISSING" };
+      if (result.success !== true) return { kind: "rejected", code: "STRUCTURED_OUTPUT_REJECTED" };
+      return { kind: "accepted", value: result.value };
     },
     latestManusV2TaskState: (events: ReadonlyArray<Record<string, unknown>>) => {
       const stopped = events.some(e => (e as { type: string }).type === "status_update" && ((e as { status_update?: { agent_status?: string } }).status_update?.agent_status === "stopped"));
@@ -305,6 +324,40 @@ describe("judge API: GET /tasks/:taskId/status", () => {
     expect(body.judge.dimensions.completeness.coverage).toHaveLength(4);
     expect(body.judge.dimensions.actionability.subMetrics).toHaveLength(3);
     expect(body.judge.dimensions.boundaryRisk.risks).toHaveLength(6);
+  });
+
+  it("accepts the envelope variant where value is the JSON string directly", async () => {
+    const events = [judgeEventRawString(JSON.stringify(validJudge)), stoppedEvent()];
+    const { url } = await makeApp({ upstreamEvents: events });
+    const res = await getStatus(url, "task-judge-001");
+    expect(res.status).toBe(200);
+    expect((await res.json()).status).toBe("completed");
+  });
+
+  it("returns 422 MISSING when the upstream envelope explicitly rejects the extraction", async () => {
+    const events = [
+      { id: "evt-rej", type: "structured_output_result", timestamp: Date.now(),
+        structured_output_result: { success: false, error: "extraction failed" } },
+      stoppedEvent(),
+    ];
+    const { url } = await makeApp({ upstreamEvents: events });
+    const res = await getStatus(url, "task-judge-001");
+    expect(res.status).toBe(422);
+    expect((await res.json()).error.code).toBe("JUDGE_STRUCTURED_OUTPUT_MISSING");
+  });
+
+  it("returns 422 MISSING for legacy bare payload events without the upstream envelope", async () => {
+    // Old (wrong) assumption: {payload} directly on the event field. Real
+    // upstream output lives under {success, value}; bare shapes must not pass.
+    const events = [
+      { id: "evt-bare", type: "structured_output_result", timestamp: Date.now(),
+        structured_output_result: { payload: JSON.stringify(validJudge) } },
+      stoppedEvent(),
+    ];
+    const { url } = await makeApp({ upstreamEvents: events });
+    const res = await getStatus(url, "task-judge-001");
+    expect(res.status).toBe(422);
+    expect((await res.json()).error.code).toBe("JUDGE_STRUCTURED_OUTPUT_MISSING");
   });
 
   it("returns 422 on invalid JSON payload", async () => {

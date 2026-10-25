@@ -56,7 +56,7 @@ export function JudgeStatusBanner({ phase, error }: { phase: JudgePhase; error?:
     return <div className="rl-judge-status" role="status">LLM 语义评估进行中…（完成后自动补充到各维度）</div>;
   }
   if (phase === "failed") {
-    return <div className="rl-judge-status rl-judge-status-failed" role="alert">LLM 语义评估{error ? `失败：${error}` : "未完成"} · 规则检查结果不受影响</div>;
+    return <div className="rl-judge-status rl-judge-status-failed" role="alert">LLM 语义评估{error ? `失败：${error}` : "未完成"} · 本次未生成四维评分，应答逻辑未被修改，可重试</div>;
   }
   return null;
 }

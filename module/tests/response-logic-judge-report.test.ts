@@ -214,6 +214,19 @@ describe("formal four-dimension report rendering", () => {
     expect(html).not.toContain("规则评估");
   });
 
+  it("shows the JUDGE_STRUCTURED_OUTPUT_MISSING error honestly without stale rule wording", () => {
+    const html = renderPanel({ judgePhase: "failed", judgeError: "Judge 任务未返回结构化输出 · JUDGE_STRUCTURED_OUTPUT_MISSING", onRetry: () => {} });
+    expect(html).toContain("JUDGE_STRUCTURED_OUTPUT_MISSING");
+    expect(html).toContain("暂无法生成四维评分");
+    expect(html).toContain("应答逻辑未被修改");
+    // No successful scores and no stale rule-era consolation wording.
+    expect(html).not.toContain('role="meter"');
+    expect(html).not.toContain("规则检查结果不受影响");
+    expect(html).not.toContain("规则评估");
+    // Retry stays manual: the failed state renders a button, never auto-restarts.
+    expect(html).toContain("重新发起评估");
+  });
+
   it("does not depend on any rule-evaluation input: the panel accepts none", () => {
     // Compiling this call with only judge props is the contract; rendering must succeed.
     const html = renderPanel({ judgePhase: "completed", judgeResult: buildJudge() });

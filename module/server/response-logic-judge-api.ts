@@ -261,7 +261,20 @@ ${evidenceInstruction}
  * Result parsing and validation
  * ------------------------------------------------------------------------- */
 
-function parseJudgePayload(events: ReadonlyArray<ManusV2MessageEvent>): {
+/**
+ * Extract the judge output from the task's structured-output events.
+ *
+ * The upstream wraps every structured output in a {success, value, error}
+ * envelope (see Core's manus-v2-structured-result.ts); the schema-shaped
+ * business value lives under `value`. Unwrap through
+ * classifyManusV2StructuredResultEnvelope exactly like the generation and
+ * knowledge-base call chains, then read the declared payload string (or a
+ * directly stringified JSON value) and run the strict Zod contract.
+ */
+function parseJudgePayload(
+  core: EvaluationCore,
+  events: ReadonlyArray<ManusV2MessageEvent>,
+): {
   ok: true;
   judge: JudgeOutput;
 } | {
@@ -273,9 +286,14 @@ function parseJudgePayload(events: ReadonlyArray<ManusV2MessageEvent>): {
     (a, b) => b.timestamp - a.timestamp || b.id.localeCompare(a.id),
   )) {
     if (event.type !== "structured_output_result") continue;
-    const value = (event as { structured_output_result?: unknown }).structured_output_result;
-    if (typeof value !== "object" || value === null) continue;
-    const payload = (value as { payload?: unknown }).payload;
+    const classified = core.classifyManusV2StructuredResultEnvelope(
+      (event as { structured_output_result?: unknown }).structured_output_result,
+    );
+    if (classified.kind !== "accepted") continue;
+    let payload: unknown = classified.value;
+    if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+      payload = (payload as { payload?: unknown }).payload;
+    }
     if (typeof payload !== "string") continue;
 
     let parsed: unknown;
@@ -727,7 +745,7 @@ export function createResponseLogicJudgeRouter(core: EvaluationCore): import("ex
       }
 
       // Parse and validate structured output
-      const parsedResult = parseJudgePayload(events);
+      const parsedResult = parseJudgePayload(core, events);
       if (!parsedResult.ok) {
         judgeError(res, 422, parsedResult.code, parsedResult.message);
         return;
