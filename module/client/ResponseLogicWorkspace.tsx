@@ -55,6 +55,8 @@ import {ResponseLogicEvaluationPanel} from "./response-logic/evaluation-panel.js
 import {ResponseLogicOptimizationWorkflow} from "./response-logic/optimization-workflow.js";
 import {createDemoEvaluation, fingerprintLogic, type LogicField, type LogicSections} from "./response-logic/mock-evaluation.js";
 import {resolveResponseLogicRuleEvaluation, type ResponseLogicRuleEvaluation} from "./response-logic-evaluation-client.js";
+import {useJudgeEvaluation} from "./use-judge-evaluation.js";
+import {JudgeResultPanel} from "./response-logic/judge-panel.js";
 import {
   parseResponseLogicReply as parseResponseLogicReplyCore,
   getResponseLogicPollDelay as getResponseLogicPollDelayCore,
@@ -1832,6 +1834,11 @@ function ResponseLogicQuestionEditor({
   }, [questionId, currentRevision]);
   const beginDemoEvaluation = () => { void runServerEvaluation().then(evaluation => { if (evaluation) setDemoView("evaluation"); }); };
 
+  // LLM-as-Judge async evaluation (independent from rule evaluation)
+  const [showJudge, setShowJudge] = useState(false);
+  const judge = useJudgeEvaluation({ questionId, recordRevision: currentRevision, sourceFingerprint: currentFingerprint });
+  const beginJudgeEvaluation = () => { setShowJudge(true); void judge.start(); };
+
   const showGenerationProcess =
     generating ||
     Boolean(generation?.completedAt) ||
@@ -1954,8 +1961,19 @@ function ResponseLogicQuestionEditor({
             <>
               <button type="button" className="rl-eval-entry-button" onClick={beginDemoEvaluation}>查看四维评估</button>
               <button type="button" className="rl-eval-entry-button" onClick={() => { void (async () => { if (validDemoEvaluation) { setDemoView("optimize"); return; } const evaluation = await runServerEvaluation(); if (evaluation) setDemoView("optimize"); })(); }}>生成优化应答逻辑</button>
+              {!showJudge && <button type="button" className="rl-eval-entry-button" onClick={beginJudgeEvaluation} disabled={judge.state.phase === "starting" || judge.state.phase === "running"}>LLM 语义评估</button>}
               {evaluationError && <span role="alert" style={{display:"inline-flex",alignItems:"center",gap:8,fontSize:12,color:"#b64d52"}}>{evaluationError}<button type="button" className="rl-text-button" onClick={beginDemoEvaluation}>重试</button></span>}
             </>
+          )}
+        </div>
+      )}
+      {showDemo && demoView === "detail" && showJudge && (
+        <div className="rl-eval-entry" role="status" style={{margin:"0 0 14px",fontSize:13}}>
+          {judge.state.phase === "starting" && <span style={{display:"inline-flex",alignItems:"center",gap:6,color:"#667085"}}><Loader2 size={14} className="animate-spin"/>正在启动 LLM 语义评估…</span>}
+          {judge.state.phase === "running" && <span style={{display:"inline-flex",alignItems:"center",gap:6,color:"#667085"}}><Loader2 size={14} className="animate-spin"/>LLM 评估进行中…（任务 {judge.state.taskId?.slice(0,12)}…）</span>}
+          {judge.state.phase === "failed" && <span style={{color:"#b64d52",fontSize:12}} role="alert">{judge.state.error}<button type="button" className="rl-text-button" onClick={beginJudgeEvaluation}>重试</button><button type="button" className="rl-text-button" onClick={() => { judge.reset(); setShowJudge(false); }}>关闭</button></span>}
+          {judge.state.phase === "completed" && judge.state.result && (
+            <JudgeResultPanel judge={judge.state.result} onBack={() => { judge.reset(); setShowJudge(false); }} />
           )}
         </div>
       )}

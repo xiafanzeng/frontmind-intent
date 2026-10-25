@@ -197,6 +197,30 @@
 .rl-single-page .rl-cov-item>summary:hover{background:#faf7fc}
 .rl-single-page .rl-cov-item[open]>summary{background:#faf7fc}
 
+/* —— LLM-as-Judge 评估面板：复用 rl-eval-* 风格体系，新增 judge 专属布局 —— */
+.rl-single-page .rl-judge-root{--iw-purple:#7545a0;--iw-green:#16794f;--iw-warning:#a86722;--iw-red:#b64d52;--iw-ink:#20232b;--iw-muted:#667085;--iw-line:#eaecf0}
+.rl-single-page .rl-judge-overall{font-size:13px;color:#475467;line-height:1.8;margin:12px 0 16px;padding:12px 14px;background:#f8f7fa;border-radius:8px}
+.rl-single-page .rl-judge-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:18px}
+.rl-single-page .rl-judge-finding{margin:8px 0;padding:10px 12px;border-left:3px solid var(--iw-line);background:#fafafa;border-radius:0 8px 8px 0}
+.rl-single-page .rl-judge-finding-head{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.rl-single-page .rl-judge-evidence{margin:6px 0;padding:8px 12px;border-left:3px solid var(--iw-purple);background:#f7f3fb;border-radius:0 6px 6px 0;font-size:12px;color:#475467;line-height:1.7;font-style:italic}
+.rl-single-page .rl-judge-reason{font-size:12px;color:#475467;line-height:1.7;margin:4px 0}
+.rl-single-page .rl-judge-suggestion{font-size:12px;color:#475467;line-height:1.7;margin:4px 0}
+.rl-single-page .rl-judge-suggestion b{color:var(--iw-purple);font-weight:600;margin-right:6px}
+.rl-single-page .rl-judge-coverage{margin:10px 0}
+.rl-single-page .rl-judge-cov-item{margin:6px 0;padding:8px 10px;border:1px solid var(--iw-line);border-radius:8px}
+.rl-single-page .rl-judge-cov-label{font-weight:550;font-size:13px;margin-right:8px}
+.rl-single-page .rl-judge-submetrics{margin:10px 0}
+.rl-single-page .rl-judge-submetric{margin:8px 0;padding:8px 10px;border:1px solid var(--iw-line);border-radius:8px}
+.rl-single-page .rl-judge-submetric-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rl-single-page .rl-judge-submetric-label{font-weight:550;font-size:12.5px}
+.rl-single-page .rl-judge-risks{margin:10px 0}
+.rl-single-page .rl-judge-risk-item{margin:6px 0;padding:8px 10px;border:1px solid var(--iw-line);border-radius:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rl-single-page .rl-judge-risk-label{font-weight:550;font-size:12.5px}
+.rl-single-page .rl-judge-null-note{font-size:12px;color:#667085;margin:8px 0 0}
+@media(max-width:800px){.rl-single-page .rl-judge-grid{grid-template-columns:1fr}}
+@media(max-width:480px){.rl-single-page .rl-judge-grid{grid-template-columns:1fr}.rl-single-page .rl-judge-finding{padding:8px 10px}}
+
 /* —— Soft Utility 探索层：统一过渡（160–240ms）/轻按压反馈/减少动效偏好；不改品牌色、字体与结构 —— */
 .rl-single-page .rl-eval-outline,.rl-single-page .rl-eval-primary,.rl-single-page .rl-eval-entry-button,.rl-single-page .rl-dx-locate,.rl-single-page .rl-eval-back-button{transition:background-color .2s ease,border-color .2s ease,color .2s ease,opacity .2s ease,transform .16s ease}
 .rl-single-page .rl-eval-outline:active:not(:disabled),.rl-single-page .rl-eval-primary:active:not(:disabled),.rl-single-page .rl-eval-entry-button:active:not(:disabled),.rl-single-page .rl-dx-locate:active:not(:disabled){transform:scale(.98)}
