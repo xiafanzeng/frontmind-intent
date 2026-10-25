@@ -2,11 +2,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import express, { type Request } from "express";
 import http from "node:http";
 import { once } from "node:events";
-import { createResponseLogicJudgeRouter, judgeSkillDirectoryCandidates } from "../server/response-logic-judge-api";
+import { createResponseLogicJudgeRouter, judgeSkillDirectoryCandidates, buildJudgeSkillArchive } from "../server/response-logic-judge-api";
 import { buildDirectorySkillArchive } from "../server/directory-skill-archive";
 import { mkdtemp, cp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { CredentialHandle, CoreRequest } from "../server/task-ports";
 import type { ResponseLogicRecordDto } from "../contracts/response-logic";
 import { fingerprintLogic } from "../contracts/response-logic-evaluation";
@@ -557,6 +557,21 @@ describe("judge skill directory resolution", () => {
     expect(candidates[0]).toContain("workflows");
     const normalized = candidates[3]!.replaceAll("\\", "/");
     expect(normalized).toMatch(/\/module-build\/module\/workflows\/response-logic-evaluator\.skill$/);
+    // Lock the container math: ../../ from the verified runtime cwd
+    // /app/apps/dashboard must climb into /app/module-build (normalize away
+    // the Windows drive prefix this test host adds).
+    const containerResolve = resolve("/app/apps/dashboard", "../../module-build/module/workflows/response-logic-evaluator.skill")
+      .replaceAll("\\", "/").replace(/^[A-Za-z]:/, "");
+    expect(containerResolve).toBe("/app/module-build/module/workflows/response-logic-evaluator.skill");
+  });
+
+  it("rejects a relative configured path lazily, without breaking module load or other APIs", async () => {
+    // Importing this test file already proves the module loads with no env
+    // validation at boot; the bad value must only fail the judge archive build.
+    await expect(buildJudgeSkillArchive("relative/skill-path"))
+      .rejects.toThrow(/FRONTMIND_RESPONSE_LOGIC_JUDGE_SKILL_PATH must be an absolute path/);
+    // The router factory itself stays constructible for unrelated endpoints.
+    expect(typeof createResponseLogicJudgeRouter).toBe("function");
   });
 
   it("packages a complete skill from a configured temp directory", async () => {

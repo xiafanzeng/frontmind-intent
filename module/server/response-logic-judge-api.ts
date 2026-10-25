@@ -132,9 +132,6 @@ function judgeIdempotencyKey(input: {
 
 const configuredJudgeSkillPath =
   process.env.FRONTMIND_RESPONSE_LOGIC_JUDGE_SKILL_PATH?.trim();
-if (configuredJudgeSkillPath && !isAbsolute(configuredJudgeSkillPath)) {
-  throw new Error("FRONTMIND_RESPONSE_LOGIC_JUDGE_SKILL_PATH must be an absolute path");
-}
 
 /**
  * Candidate directories for the evaluator Skill, in priority order — same
@@ -154,7 +151,13 @@ export function judgeSkillDirectoryCandidates(configuredPath: string | undefined
   ];
 }
 
-async function buildJudgeSkillArchive(configuredPath: string | undefined = configuredJudgeSkillPath) {
+export async function buildJudgeSkillArchive(configuredPath: string | undefined = configuredJudgeSkillPath) {
+  // Validated lazily on purpose: a misconfigured judge-only env key must fail
+  // this endpoint with a clear diagnostic, not prevent the whole service
+  // (questions, editing, internal rule diagnostics) from booting.
+  if (configuredPath && !isAbsolute(configuredPath)) {
+    throw new Error(`FRONTMIND_RESPONSE_LOGIC_JUDGE_SKILL_PATH must be an absolute path (got: ${configuredPath})`);
+  }
   const skillDirectoryCandidates = judgeSkillDirectoryCandidates(configuredPath);
   try {
     return await buildDirectorySkillArchive({
