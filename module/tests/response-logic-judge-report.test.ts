@@ -139,12 +139,12 @@ describe("judgeEvaluationReducer", () => {
   });
 
   it("shares one polling budget across judge and optimizer covering real 7-12min runtimes", () => {
-    // ~10 minutes at the 3s interval; production judge tasks observed at
-    // 7-12 minutes made the previous 100-attempt (~5 min) cap report
-    // spurious timeouts while the task was still executing upstream.
+    // ~15 minutes at the 3s interval; production judge tasks observed at
+    // 7-12 minutes made earlier caps (5, then 10 minutes) report spurious
+    // timeouts while the task was still executing upstream.
     expect(TASK_POLL_INTERVAL_MS).toBe(3000);
-    expect(MAX_TASK_POLL_ATTEMPTS).toBe(200);
-    expect((MAX_TASK_POLL_ATTEMPTS * TASK_POLL_INTERVAL_MS) / 60000).toBeGreaterThanOrEqual(10);
+    expect(MAX_TASK_POLL_ATTEMPTS).toBe(300);
+    expect((MAX_TASK_POLL_ATTEMPTS * TASK_POLL_INTERVAL_MS) / 60000).toBeGreaterThanOrEqual(15);
     // A timeout settles the phase into failed — it never dispatches a new
     // start by itself; a manual restart is the only path to a new request.
     const timedOut = judgeEvaluationReducer(runningOn(K1), { type: "timeout", contextKey: K1 });

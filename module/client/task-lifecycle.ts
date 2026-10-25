@@ -16,14 +16,14 @@ export type TaskPhase = "idle" | "starting" | "running" | "completed" | "failed"
  *
  * Real frontmind-pro evaluations observed in production run 7-12 minutes,
  * so the previous 100-attempt (~5 min) cap reported spurious timeouts while
- * the upstream task was still executing. 200 attempts × 3s ≈ 10 minutes
- * covers the observed P99. On timeout the task MAY still be running in the
- * background: the idempotency key makes a later manual restart reuse the
- * same upstream task, so the wording tells users to check back later
- * instead of implying the task failed.
+ * the upstream task was still executing. 300 attempts × 3s ≈ 15 minutes
+ * covers the observed worst case with headroom. On timeout the task MAY
+ * still be running in the background: the idempotency key makes a later
+ * manual restart reuse the same upstream task, so the wording tells users
+ * to check back later instead of implying the task failed.
  */
 export const TASK_POLL_INTERVAL_MS = 3000;
-export const MAX_TASK_POLL_ATTEMPTS = 200; // ~10 minutes
+export const MAX_TASK_POLL_ATTEMPTS = 300; // ~15 minutes
 
 export type TaskLifecycleState<T> = {
   phase: TaskPhase;
