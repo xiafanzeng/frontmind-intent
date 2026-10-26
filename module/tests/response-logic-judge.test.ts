@@ -295,9 +295,11 @@ describe("evaluator skill directory archive", () => {
     expect(archive.version).toBe("1");
   });
 
-  it("all four required files are non-empty", async () => {
+  it("all required files are non-empty", async () => {
     const skillDir = join(import.meta.dirname, "../workflows/response-logic-evaluator.skill");
-    const files = ["SKILL.md", "references/output-contract.md", "references/rubric.md", "agents/openai.yaml"];
+    // agents/openai.yaml was removed: nothing in Core or the agent-runner
+    // reads it (model comes from the credential/runtime), so it only misled.
+    const files = ["SKILL.md", "references/output-contract.md", "references/rubric.md"];
     for (const file of files) {
       const content = await readFile(join(skillDir, file), "utf8");
       expect(content.trim().length).toBeGreaterThan(0);
